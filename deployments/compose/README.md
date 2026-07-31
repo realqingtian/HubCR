@@ -1,5 +1,7 @@
 # Local infrastructure
 
+**English** | [简体中文](README.zh-CN.md)
+
 This Compose stack starts PostgreSQL, Redis, MinIO, and CNCF Distribution for local
 development. It intentionally does not start the API, worker, or web application so
 each process can run with native hot reload.

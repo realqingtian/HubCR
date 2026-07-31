@@ -1,5 +1,7 @@
 # HubCR architecture
 
+**English** | [简体中文](architecture.zh-CN.md)
+
 HubCR separates the business control plane from the OCI data plane.
 
 ```text

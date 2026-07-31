@@ -1,5 +1,7 @@
 # HubCR web
 
+**English** | [简体中文](README.zh-CN.md)
+
 The HubCR web application uses Next.js App Router, React, TypeScript, Tailwind CSS,
 TanStack Query, and Zod.
 

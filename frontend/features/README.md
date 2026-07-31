@@ -1,5 +1,7 @@
 # Frontend features
 
+**English** | [简体中文](README.zh-CN.md)
+
 Feature code is grouped here by product capability. Initial boundaries are:
 
 - `auth`: registration, login, sessions, and OIDC flows
