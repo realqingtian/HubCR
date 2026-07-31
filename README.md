@@ -271,6 +271,8 @@ must link to and remain synchronized with its Simplified Chinese counterpart.
 | Document | English | 简体中文 |
 | --- | --- | --- |
 | Project overview | [README](README.md) | [README](README.zh-CN.md) |
+| Product requirements | [Requirements](docs/requirements.md) | [产品需求](docs/requirements.zh-CN.md) |
+| Executable development plan | [Development plan](docs/development-plan.md) | [开发计划](docs/development-plan.zh-CN.md) |
 | Architecture | [Architecture](docs/architecture.md) | [架构](docs/architecture.zh-CN.md) |
 | Development standards | [Development](docs/development.md) | [开发规范](docs/development.zh-CN.md) |
 | AI instruction hierarchy | [Instructions](AGENTS.md) | [AI 指令](AGENTS.zh-CN.md) |

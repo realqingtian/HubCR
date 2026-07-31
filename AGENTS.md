@@ -24,6 +24,9 @@ only repository-wide rules shared by every area of the project.
 - Read `README.md` for current capabilities and limitations.
 - Read `docs/architecture.md` and `docs/development.md` before structural or behavioral
   changes.
+- Read `docs/requirements.md` and `docs/development-plan.md` before planning or
+  implementing product capabilities. Respect their decision gates and do not start a
+  blocked work package by inventing the missing policy.
 - Read the `AGENTS.md` nearest to every file you will modify.
 - Inspect `git status` and the relevant implementation before editing. Preserve
   unrelated user changes and never discard work you did not create.
@@ -77,6 +80,8 @@ for a decision before implementing schema, API, or UI contracts that depend on i
 
 - Keep changes scoped to the requested behavior; avoid unrelated refactors.
 - Identify the owning area and module before adding code.
+- For planned product work, reference the relevant requirement and work-package IDs.
+  Update plan state only when its acceptance evidence changes.
 - Add or update focused tests for behavior changes and regressions.
 - Prefer existing dependencies. Explain a new production dependency before adding it.
 - Update architecture and status documentation when commands, boundaries, or available

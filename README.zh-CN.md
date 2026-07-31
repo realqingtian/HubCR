@@ -259,6 +259,8 @@ docker compose --env-file .env -f deployments/compose/compose.yaml down
 | 文档 | English | 简体中文 |
 | --- | --- | --- |
 | 项目介绍 | [README](README.md) | [README](README.zh-CN.md) |
+| 产品需求 | [Requirements](docs/requirements.md) | [产品需求](docs/requirements.zh-CN.md) |
+| 可执行开发计划 | [Development plan](docs/development-plan.md) | [开发计划](docs/development-plan.zh-CN.md) |
 | 架构 | [Architecture](docs/architecture.md) | [架构](docs/architecture.zh-CN.md) |
 | 开发规范 | [Development](docs/development.md) | [开发规范](docs/development.zh-CN.md) |
 | AI 指令层级 | [Instructions](AGENTS.md) | [AI 指令](AGENTS.zh-CN.md) |

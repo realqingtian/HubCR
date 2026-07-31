@@ -5,7 +5,10 @@
 This document defines the engineering rules for HubCR contributors. The root
 [`AGENTS.md`](../AGENTS.md) is the primary repository-wide entry point. The
 `backend/AGENTS.md` and `frontend/AGENTS.md` files add rules only within their own
-directories. This document provides the fuller rationale and workflow.
+directories. The [product requirements](requirements.md) define intended behavior,
+and the [executable development plan](development-plan.md) controls sequencing,
+decision gates, and completion evidence. This document provides the fuller engineering
+rationale and workflow.
 
 ## 1. Architectural baseline
 
@@ -30,8 +33,9 @@ maintainer approval before implementation.
 
 For every change:
 
-1. Read `AGENTS.md`, the relevant architecture documentation, and any nearer
-   directory-specific instructions.
+1. Read `AGENTS.md`, the requirements, the active development-plan milestone, the
+   relevant architecture documentation, and any nearer directory-specific
+   instructions.
 2. Inspect the current implementation and Git status before editing. Preserve
    unrelated user changes.
 3. State the behavior or invariant being changed and identify the owning module.
@@ -43,6 +47,10 @@ For every change:
    external-service behavior.
 8. Proactively ask whether the user wants the completed changes committed and pushed
    to the configured remote repository.
+
+For planned product delivery, reference the relevant requirement and work-package IDs.
+Do not begin a blocked work package by choosing an unresolved policy. Update plan state
+only when acceptance evidence has changed.
 
 Do not commit, push, tag, publish, delete data, or change external systems unless the
 user explicitly authorizes that action. The required question in step 8 is not
