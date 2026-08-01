@@ -92,6 +92,10 @@ need; do not split the modular monolith by default.
 - Define interfaces where they are consumed, not in infrastructure packages.
 - Avoid mutable package globals and implicit initialization side effects.
 - Use graceful shutdown for servers and workers.
+- GORM with the PostgreSQL driver is the selected persistence ORM. GORM records stay
+  in infrastructure adapters and remain separate from domain entities and HTTP DTOs.
+- Schema changes use explicit Gormigrate entries with stable ordered IDs. Do not run
+  unrestricted `AutoMigrate` during API or worker startup.
 
 Tests should be colocated as `*_test.go`, deterministic, and independent of external
 services unless explicitly marked as integration tests.
@@ -122,16 +126,26 @@ cover. Add Playwright coverage when complete user workflows are introduced.
 
 - Business APIs are REST endpoints under `/api/v1`; `/token` and `/v2/` retain their
   Registry-specific protocol paths.
+- Follow the shared response, error, request ID, JSON, time, and pagination contract in
+  [`api.md`](api.md); keep the reviewed [`openapi.yaml`](openapi.yaml) synchronized.
 - Treat all request data as untrusted and validate it before calling domain logic.
 - Keep transport DTOs separate from database records and domain entities.
 - Do not expose internal errors, SQL details, secrets, or stack traces in responses.
 - Make retryable write operations idempotent where practical.
+- All organization and repository capability decisions go through
+  `internal/modules/authorization`; missing roles, memberships, owners, capabilities,
+  or resource data deny by default.
 - Use transactions for state changes that must remain atomic.
 - Store timestamps in UTC and return an explicit timezone in serialized values.
 - Add indexes based on known access patterns and verify uniqueness constraints at the
   database boundary.
+- Namespace names are lowercase ASCII OCI path components, at most 64 bytes, matching
+  `[a-z0-9]+(?:[._-][a-z0-9]+)*`. Normalization lowercases only; whitespace, Unicode,
+  path separators, and repeated separators are rejected rather than rewritten.
 - After the first public release, migrations are append-only. Never edit a migration
   that may have been applied outside the local machine.
+- Run migrations as an explicit command under the PostgreSQL advisory lock and verify
+  them against an isolated empty database in integration tests.
 
 ## 7. OCI and security invariants
 
@@ -154,14 +168,15 @@ These rules are mandatory:
 - Never commit real secrets. Development defaults must be visibly marked as unsafe
   for shared or production use.
 
-## 8. Product decisions that remain open
+## 8. Product decisions
 
-Do not silently choose or encode the following policies:
+G-01 and G-02 are closed by the accepted records under [`docs/decisions`](decisions/README.md).
+They select self-hosted/private deployment first, administrator invitations, local
+credentials, the four-role organization matrix, organization-role-only grants, and
+anonymous pull for explicit public repositories.
 
-- public SaaS first versus private deployment first;
-- self-registration versus invitation-only accounts;
-- final organization role names and capabilities;
-- organization-role inheritance versus repository-specific grants;
+Do not silently choose or encode the product policies that remain open:
+
 - whether pulls are blocked while scans are pending or failing;
 - fixed keys, organization keys, OIDC keyless signing, or a combined trust model;
 - the final production target: Compose, Kubernetes, or both;

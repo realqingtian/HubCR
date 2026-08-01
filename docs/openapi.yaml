@@ -1,0 +1,585 @@
+openapi: 3.1.0
+info:
+  title: HubCR control-plane API
+  version: 0.1.0
+  description: Current implemented control-plane contract. Planned product APIs are intentionally absent.
+servers:
+  - url: http://localhost:8080
+paths:
+  /api/v1/health/live:
+    get:
+      operationId: getLiveness
+      summary: Check whether the control-plane process is alive
+      responses:
+        "200":
+          description: The process is alive.
+          headers:
+            X-Request-ID:
+              $ref: "#/components/headers/RequestID"
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/HealthResponse"
+  /api/v1/health/ready:
+    get:
+      operationId: getReadiness
+      summary: Check whether required control-plane dependencies are usable
+      responses:
+        "200":
+          description: PostgreSQL is usable for traffic.
+          headers:
+            X-Request-ID:
+              $ref: "#/components/headers/RequestID"
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/HealthResponse"
+        "503":
+          description: A required dependency is unavailable.
+          headers:
+            X-Request-ID:
+              $ref: "#/components/headers/RequestID"
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/HealthResponse"
+              examples:
+                unavailable:
+                  value:
+                    status: unavailable
+  /api/v1/auth/login:
+    post:
+      operationId: login
+      summary: Create a revocable web session with local credentials
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/LoginRequest"
+      responses:
+        "200":
+          description: Authentication succeeded and the opaque session cookie was set.
+          headers:
+            X-Request-ID:
+              $ref: "#/components/headers/RequestID"
+            Set-Cookie:
+              description: HttpOnly hubcr_session cookie; Secure is enabled by deployment configuration.
+              schema:
+                type: string
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/LoginResponse"
+        "401":
+          $ref: "#/components/responses/AuthenticationFailed"
+        "422":
+          $ref: "#/components/responses/ValidationFailed"
+        "429":
+          $ref: "#/components/responses/RateLimited"
+  /api/v1/auth/logout:
+    post:
+      operationId: logout
+      summary: Revoke and clear the current web session
+      security:
+        - sessionCookie: []
+      responses:
+        "204":
+          description: The session is revoked or was already absent, and the cookie is cleared.
+          headers:
+            X-Request-ID:
+              $ref: "#/components/headers/RequestID"
+            Set-Cookie:
+              description: Expired hubcr_session cookie.
+              schema:
+                type: string
+  /api/v1/auth/me:
+    get:
+      operationId: getCurrentUser
+      summary: Return the user identified by the current web session
+      security:
+        - sessionCookie: []
+      responses:
+        "200":
+          description: The current session is valid.
+          headers:
+            X-Request-ID:
+              $ref: "#/components/headers/RequestID"
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/User"
+        "401":
+          $ref: "#/components/responses/AuthenticationFailed"
+  /api/v1/organizations:
+    get:
+      operationId: listOrganizations
+      summary: List organizations containing the current user
+      security:
+        - sessionCookie: []
+      parameters:
+        - $ref: "#/components/parameters/Limit"
+        - $ref: "#/components/parameters/Cursor"
+      responses:
+        "200":
+          description: A bounded page of organizations.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/OrganizationList"
+        "401":
+          $ref: "#/components/responses/AuthenticationFailed"
+    post:
+      operationId: createOrganization
+      summary: Create an organization and initial owner membership
+      security:
+        - sessionCookie: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CreateOrganizationRequest"
+      responses:
+        "201":
+          description: The organization, namespace, and initial owner were created atomically.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Organization"
+        "401":
+          $ref: "#/components/responses/AuthenticationFailed"
+        "409":
+          $ref: "#/components/responses/Conflict"
+        "422":
+          $ref: "#/components/responses/ValidationFailed"
+  /api/v1/organizations/{organization_id}:
+    parameters:
+      - $ref: "#/components/parameters/OrganizationID"
+    get:
+      operationId: getOrganization
+      summary: Get an organization visible to the current member
+      security:
+        - sessionCookie: []
+      responses:
+        "200":
+          description: Organization details.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Organization"
+        "401":
+          $ref: "#/components/responses/AuthenticationFailed"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+  /api/v1/organizations/{organization_id}/members:
+    parameters:
+      - $ref: "#/components/parameters/OrganizationID"
+    get:
+      operationId: listOrganizationMembers
+      summary: List organization members
+      security:
+        - sessionCookie: []
+      parameters:
+        - $ref: "#/components/parameters/Limit"
+        - $ref: "#/components/parameters/Cursor"
+      responses:
+        "200":
+          description: A bounded page of memberships.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/MembershipList"
+        "401":
+          $ref: "#/components/responses/AuthenticationFailed"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+    post:
+      operationId: addOrganizationMember
+      summary: Add an organization member under the approved role matrix
+      security:
+        - sessionCookie: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/AddMemberRequest"
+      responses:
+        "204":
+          description: The membership was created.
+        "401":
+          $ref: "#/components/responses/AuthenticationFailed"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "409":
+          $ref: "#/components/responses/Conflict"
+        "422":
+          $ref: "#/components/responses/ValidationFailed"
+  /api/v1/organizations/{organization_id}/members/{user_id}:
+    parameters:
+      - $ref: "#/components/parameters/OrganizationID"
+      - $ref: "#/components/parameters/UserID"
+    patch:
+      operationId: changeOrganizationMemberRole
+      summary: Change an organization member role
+      security:
+        - sessionCookie: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ChangeRoleRequest"
+      responses:
+        "204":
+          description: The role was changed.
+        "401":
+          $ref: "#/components/responses/AuthenticationFailed"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "409":
+          $ref: "#/components/responses/Conflict"
+        "422":
+          $ref: "#/components/responses/ValidationFailed"
+    delete:
+      operationId: removeOrganizationMember
+      summary: Remove an organization member
+      security:
+        - sessionCookie: []
+      responses:
+        "204":
+          description: The member was removed.
+        "401":
+          $ref: "#/components/responses/AuthenticationFailed"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "409":
+          $ref: "#/components/responses/Conflict"
+components:
+  securitySchemes:
+    sessionCookie:
+      type: apiKey
+      in: cookie
+      name: hubcr_session
+  headers:
+    RequestID:
+      description: Accepted or generated request correlation identifier.
+      schema:
+        type: string
+        minLength: 1
+        maxLength: 128
+  parameters:
+    OrganizationID:
+      name: organization_id
+      in: path
+      required: true
+      schema:
+        type: string
+        format: uuid
+    UserID:
+      name: user_id
+      in: path
+      required: true
+      schema:
+        type: string
+        format: uuid
+    Limit:
+      name: limit
+      in: query
+      schema:
+        type: integer
+        minimum: 1
+        maximum: 100
+        default: 20
+    Cursor:
+      name: cursor
+      in: query
+      schema:
+        type: string
+        maxLength: 512
+  schemas:
+    HealthResponse:
+      type: object
+      additionalProperties: false
+      required:
+        - status
+      properties:
+        status:
+          type: string
+          enum:
+            - ok
+            - unavailable
+    FieldError:
+      type: object
+      additionalProperties: false
+      required:
+        - field
+        - message
+      properties:
+        field:
+          type: string
+        message:
+          type: string
+    User:
+      type: object
+      additionalProperties: false
+      required:
+        - id
+        - username
+        - created_at
+      properties:
+        id:
+          type: string
+          format: uuid
+        username:
+          type: string
+          minLength: 1
+          maxLength: 64
+        created_at:
+          type: string
+          format: date-time
+    LoginRequest:
+      type: object
+      additionalProperties: false
+      required:
+        - username
+        - password
+      properties:
+        username:
+          type: string
+          minLength: 1
+          maxLength: 64
+        password:
+          type: string
+          minLength: 1
+          maxLength: 1024
+          writeOnly: true
+    LoginResponse:
+      type: object
+      additionalProperties: false
+      required:
+        - user
+        - expires_at
+      properties:
+        user:
+          $ref: "#/components/schemas/User"
+        expires_at:
+          type: string
+          format: date-time
+    Role:
+      type: string
+      enum:
+        - OWNER
+        - ADMIN
+        - WRITER
+        - READER
+    CreateOrganizationRequest:
+      type: object
+      additionalProperties: false
+      required:
+        - name
+      properties:
+        name:
+          type: string
+          minLength: 1
+          maxLength: 64
+        description:
+          type: string
+          maxLength: 1024
+    Organization:
+      type: object
+      additionalProperties: false
+      required:
+        - id
+        - namespace
+        - description
+        - created_by_user_id
+        - created_at
+        - updated_at
+      properties:
+        id:
+          type: string
+          format: uuid
+        namespace:
+          type: string
+          maxLength: 64
+        description:
+          type: string
+        created_by_user_id:
+          type: string
+          format: uuid
+        created_at:
+          type: string
+          format: date-time
+        updated_at:
+          type: string
+          format: date-time
+    Membership:
+      type: object
+      additionalProperties: false
+      required:
+        - user_id
+        - role
+        - added_by_user_id
+        - created_at
+        - updated_at
+      properties:
+        user_id:
+          type: string
+          format: uuid
+        role:
+          $ref: "#/components/schemas/Role"
+        added_by_user_id:
+          type: string
+          format: uuid
+        created_at:
+          type: string
+          format: date-time
+        updated_at:
+          type: string
+          format: date-time
+    PageMeta:
+      type: object
+      additionalProperties: false
+      required:
+        - limit
+      properties:
+        limit:
+          type: integer
+          minimum: 1
+          maximum: 100
+        next_cursor:
+          type: string
+    OrganizationList:
+      type: object
+      additionalProperties: false
+      required:
+        - items
+        - meta
+      properties:
+        items:
+          type: array
+          items:
+            $ref: "#/components/schemas/Organization"
+        meta:
+          $ref: "#/components/schemas/PageMeta"
+    MembershipList:
+      type: object
+      additionalProperties: false
+      required:
+        - items
+        - meta
+      properties:
+        items:
+          type: array
+          items:
+            $ref: "#/components/schemas/Membership"
+        meta:
+          $ref: "#/components/schemas/PageMeta"
+    AddMemberRequest:
+      type: object
+      additionalProperties: false
+      required:
+        - user_id
+        - role
+      properties:
+        user_id:
+          type: string
+          format: uuid
+        role:
+          $ref: "#/components/schemas/Role"
+    ChangeRoleRequest:
+      type: object
+      additionalProperties: false
+      required:
+        - role
+      properties:
+        role:
+          $ref: "#/components/schemas/Role"
+    ErrorEnvelope:
+      type: object
+      additionalProperties: false
+      required:
+        - error
+        - request_id
+      properties:
+        error:
+          type: object
+          additionalProperties: false
+          required:
+            - code
+            - message
+          properties:
+            code:
+              type: string
+              enum:
+                - invalid_request
+                - validation_failed
+                - not_found
+                - method_not_allowed
+                - authentication_failed
+                - rate_limited
+                - forbidden
+                - conflict
+                - internal_error
+            message:
+              type: string
+            fields:
+              type: array
+              items:
+                $ref: "#/components/schemas/FieldError"
+        request_id:
+          type: string
+          minLength: 1
+          maxLength: 128
+  responses:
+    AuthenticationFailed:
+      description: The credentials or web session are invalid, expired, or revoked.
+      headers:
+        X-Request-ID:
+          $ref: "#/components/headers/RequestID"
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/ErrorEnvelope"
+    ValidationFailed:
+      description: One or more request fields are invalid.
+      headers:
+        X-Request-ID:
+          $ref: "#/components/headers/RequestID"
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/ErrorEnvelope"
+    RateLimited:
+      description: Too many authentication attempts were made.
+      headers:
+        X-Request-ID:
+          $ref: "#/components/headers/RequestID"
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/ErrorEnvelope"
+    Forbidden:
+      description: The authenticated user is not permitted to perform the action.
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/ErrorEnvelope"
+    NotFound:
+      description: The requested organization membership was not found.
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/ErrorEnvelope"
+    Conflict:
+      description: The requested state conflicts with uniqueness or owner-retention rules.
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/ErrorEnvelope"

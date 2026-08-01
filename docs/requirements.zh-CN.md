@@ -78,12 +78,12 @@ hubcr.io/{namespace}/{repository}:{tag}
 
 | 区域 | 当前已实现 | 尚未实现 |
 | --- | --- | --- |
-| Go API | 进程装配、配置、优雅退出、存活与就绪接口 | 数据库适配器、身份、组织、仓库、Token 和元数据 API |
+| Go API | 进程装配、PostgreSQL 生命周期、健康检查、本地 Session API 与组织/成员 API | 账号 Bootstrap/邀请兑换、仓库、Registry Token 和元数据 API |
 | Go Worker | 可配置轮询循环与优雅退出 | PostgreSQL 任务领取与安全任务 |
 | Web | Next.js 应用脚手架、共享 Provider、类型化健康检查 Schema | 产品导航、认证和 Registry 工作流 |
 | OCI 数据面 | 使用 MinIO 的 Distribution Compose 定义 | Token 认证、事件集成和授权 Push/Pull 端到端流程 |
-| 基础设施 | PostgreSQL、Redis、MinIO、Distribution 的 Compose 定义 | 应用连接、迁移和生产部署 |
-| 质量保障 | Go 与 Web 单元检查、仓库级 `make check` | 集成测试和端到端测试套件 |
+| 基础设施 | PostgreSQL、Redis、MinIO、Distribution 的 Compose 定义；控制面 PostgreSQL 连接及带版本的 GORM 迁移基础 | Worker/Redis 连接、产品 Schema 迁移和生产部署 |
+| 质量保障 | Go 与 Web 单元检查、隔离的 PostgreSQL 迁移/连接测试及仓库级 `make check` | 产品集成和端到端测试套件 |
 
 在第 9 节 MVP 退出标准全部通过前，当前脚手架既不能用于生产，也不能被描述成已可用
 的多用户 Registry。
@@ -103,7 +103,9 @@ hubcr.io/{namespace}/{repository}:{tag}
 | FR-ID-004 | MUST | 如果确认采用本地凭据，密码绝不以明文存储，认证接口应具备接入限流的边界。 |
 | FR-ID-005 | DEFERRED | 邮箱验证、密码找回、MFA 和其他 OIDC Provider 随公网服务决策进入后续阶段。 |
 
-开放注册还是仅邀请、本地凭据还是 OIDC 仍属于决策门，不能根据本表自行推断实现。
+[D-002](decisions/d-002-registration.zh-CN.md) 与
+[D-003](decisions/d-003-initial-identity.zh-CN.md) 已为 MVP 选择管理员邀请、本地用户名/
+密码凭据以及可撤销的服务端 Session。
 
 ### 5.2 组织、命名空间与授权
 
@@ -117,7 +119,8 @@ hubcr.io/{namespace}/{repository}:{tag}
 | FR-AUTHZ-002 | MUST | 授权数据缺失或不可用时必须以拒绝方式失败，绝不能静默授予公开访问。 |
 | FR-AUTHZ-003 | SHOULD | 授权决策通过统一的后端策略边界完成，并可在后续产生审计记录。 |
 
-最终角色名称、具体能力和仓库级授权继承方式仍未确定。
+[D-004](decisions/d-004-organization-roles.zh-CN.md) 已确定 MVP 角色矩阵，
+[D-005](decisions/d-005-grant-inheritance.zh-CN.md) 已选择仅使用组织角色授权。
 
 ### 5.3 仓库
 
@@ -179,10 +182,10 @@ Web 会话与 Registry Token 是两种独立凭据。实现 FR-REG-002 前必须
 
 ## 6. 领域与数据约束
 
-第一版持久化模型预计覆盖 `User`、`Organization`、`OrganizationMember`、
-`Namespace`、`Repository`、`Artifact` 和 `Tag`。会话和凭据记录根据确认后的身份设计
-添加。安全与运维里程碑随后添加任务、扫描、SBOM、签名、信任策略、Robot、Token
-和审计记录。
+当前持久化模型已包含 `User`、本地凭据、可撤销 Web Session 与管理员邀请记录。
+后续 MVP 工作再增加 `Organization`、`OrganizationMember`、`Namespace`、
+`Repository`、`Artifact` 和 `Tag`。安全与运维里程碑随后添加任务、扫描、SBOM、
+签名、信任策略、Robot、Token 和审计记录。
 
 强制数据约束包括：
 
@@ -261,12 +264,12 @@ Registry MVP 必须端到端演示以下流程：
 
 | 决策 | 最迟确认时间 | 问题 |
 | --- | --- | --- |
-| D-001 产品模式 | 身份与发现契约前 | 私有部署优先、公网 SaaS 优先，还是两者并行但明确首要方向？ |
-| D-002 注册方式 | 用户生命周期结构和 UI 前 | 自助注册、管理员邀请，还是部署时可配置？ |
-| D-003 首期身份 | 会话实现前 | 本地凭据、OIDC 或两者兼有；MVP 默认采用哪种？ |
-| D-004 组织角色 | 成员迁移与 API 前 | 支持哪些角色，每种角色拥有哪些确切能力？ |
-| D-005 权限继承 | 授权策略前 | 仅使用组织角色，还是额外支持仓库级单独授权？ |
-| D-006 公开 Pull | Registry Token 流程前 | 允许匿名 Pull、要求认证，还是部署时可配置？ |
+| [D-001 产品模式](decisions/d-001-product-mode.zh-CN.md) | 身份与发现契约前 | `ACCEPTED`：优先私有化/自托管部署；公共 SaaS 延后。 |
+| [D-002 注册方式](decisions/d-002-registration.zh-CN.md) | 用户生命周期结构和 UI 前 | `ACCEPTED`：管理员签发一次性、会过期的邀请。 |
+| [D-003 首期身份](decisions/d-003-initial-identity.zh-CN.md) | 会话实现前 | `ACCEPTED`：本地用户名/密码凭据与可撤销服务端 Session。 |
+| [D-004 组织角色](decisions/d-004-organization-roles.zh-CN.md) | 成员迁移与 API 前 | `ACCEPTED`：`OWNER`、`ADMIN`、`WRITER`、`READER` 及记录中的能力矩阵。 |
+| [D-005 权限继承](decisions/d-005-grant-inheritance.zh-CN.md) | 授权策略前 | `ACCEPTED`：仅使用组织角色；仓库级 Grant 延后。 |
+| [D-006 公开 Pull](decisions/d-006-public-pull.zh-CN.md) | Registry Token 流程前 | `ACCEPTED`：明确 `PUBLIC` 的仓库通过精确 Scope 的短期 Token 允许匿名 Pull。 |
 | D-007 安全执行 | Pull 策略前 | 首期仅展示扫描信息，还是支持可选或强制阻断 Pull？ |
 | D-008 签名信任 | 验签数据结构前 | 固定公钥、组织公钥、OIDC Keyless 身份，还是组合模型？ |
 | D-009 生产部署 | 部署契约前 | Compose、Kubernetes 或两者都支持；首期支持哪个？ |

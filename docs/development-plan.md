@@ -4,7 +4,7 @@
 
 - Status: active living plan
 - Plan start: 2026-08-01
-- Current stage: project scaffold and local-infrastructure baseline
+- Current stage: Milestone 0 local exit complete; Milestone 1 M1-06 complete and M1-07 ready
 - Requirements: [HubCR product requirements](requirements.md)
 
 This plan converts the product baseline into ordered, testable work. It is a delivery
@@ -52,8 +52,8 @@ product decisions, external reviews, or environment downloads.
 | Web | Next.js scaffold, TanStack Query provider and Zod health schema exist | Unit tests and production build |
 | Docker host | Docker Engine `29.6.2`, Compose `v5.3.1`, `linux/arm64` server | `docker --version`, `docker compose version`, `docker info` |
 | Compose definition | PostgreSQL 17, Redis 7, MinIO and Distribution 3 configuration parses successfully | `docker compose ... config --quiet` |
-| Compose runtime | Full stack smoke is still pending; the initial image pull did not complete during this documentation task | Attempted `docker compose ... up -d --wait`; no project containers were left running |
-| Application integration | API and worker are not connected to PostgreSQL or Redis | Code inspection |
+| Compose runtime | Full stack smoke passes on Apple Silicon; the Registry host port can be overridden when macOS reserves `5000` | [Compose smoke evidence](../deployments/compose/README.md#verified-environment) |
+| Application integration | API owns a PostgreSQL pool and dependency-aware readiness; worker and Redis connections remain pending | Unit, live dependency-loss/recovery, and graceful-shutdown checks |
 | Registry integration | Distribution has MinIO storage configuration but no HubCR token auth or event flow | Compose and Distribution configuration inspection |
 
 The project is therefore at **Milestone 0**, not at a usable Registry MVP. The next
@@ -68,15 +68,15 @@ The project owner approves product decisions; implementation work records them u
 
 | Gate | Decisions | Blocks | Current state |
 | --- | --- | --- | --- |
-| G-01 Product entry | D-001 product mode, D-002 registration, D-003 initial identity | Session schema, login and registration UI | `BLOCKED` pending owner decision |
-| G-02 Authorization | D-004 organization roles, D-005 grant inheritance, D-006 public pull | Membership schema, authorization service, Registry tokens | `BLOCKED` pending owner decision |
+| G-01 Product entry | D-001 product mode, D-002 registration, D-003 initial identity | Session schema, login and registration UI | `CLOSED` on 2026-08-01; [accepted records](decisions/README.md#m0-decision-session) |
+| G-02 Authorization | D-004 organization roles, D-005 grant inheritance, D-006 public pull | Membership schema, authorization service, Registry tokens | `CLOSED` on 2026-08-01; [accepted records](decisions/README.md#m0-decision-session) |
 | G-03 Security policy | D-007 pull enforcement, D-008 signature trust | Scan policy and signature-verification contracts | `PLANNED` before Milestone 4 |
 | G-04 Operations | D-009 production target, D-010 operating policy | Production deployment, deletion, retention, GC and backups | `PLANNED` before Milestone 5 |
 | G-05 Open source | D-011 license | First public release | `BLOCKED` before public release |
 
 Decision records must state context, chosen option, rejected alternatives,
-consequences, and the date. Until G-01 and G-02 close, only policy-neutral foundation
-tasks may proceed.
+consequences, and the date. G-01 and G-02 are closed; later gates still constrain their
+respective milestones.
 
 ## 4. Milestone map
 
@@ -92,14 +92,16 @@ flowchart LR
 | Milestone | Outcome | Approximate focused effort | Entry gate |
 | --- | --- | --- | --- |
 | M0 | Reproducible infrastructure, persistence and API foundations | 1–2 weeks | Current scaffold |
-| M1 | Users, sessions, namespaces, organizations, repositories and policy checks | 3–5 weeks | G-01 and G-02 |
+| M1 | Users, sessions, namespaces, organizations, repositories and policy checks | 4–6 weeks | G-01 and G-02 |
 | M2 | Authorized OCI push/pull and digest-based metadata reconciliation | 3–5 weeks | M1 |
 | M3 | Truthful web workflows and automated Registry MVP acceptance | 2–4 weeks | M2 |
 | M4 | Async Trivy, SBOM, Cosign and trust-state workflows | 4–7 weeks | G-03 and M3 |
 | M5 | Robot access, audit, quotas, lifecycle and deployability | Incremental | G-04 and M4 |
 
-Estimates should be recalculated after M0 because identity and authorization decisions
-can materially change M1 and M2.
+The M1 estimate was recalculated after G-01 and G-02 closed. Administrator invitations,
+local password credentials, revocable sessions, and a four-role authorization matrix
+increase the original lower bound. M2 remains 3–5 weeks because D-006 preserves one
+fixed public-pull mode instead of adding deployment-configurable variants.
 
 ## 5. Milestone 0 — integration foundation
 
@@ -111,14 +113,14 @@ encoding open product policy.
 | ID | State | Result | Dependencies | Effort |
 | --- | --- | --- | --- | --- |
 | M0-01 | `DONE` | Requirements baseline and executable bilingual plan reflect current repository truth | None | 1–2 days |
-| M0-02 | `READY` | Compose stack starts on Apple Silicon and services pass documented smoke checks | Docker Desktop | 0.5–1 day |
-| M0-03 | `READY` | Repeatable `infra-up`, `infra-down`, `infra-status`, and infrastructure smoke commands | M0-02 | 0.5 day |
-| M0-04 | `READY` | PostgreSQL connection lifecycle, configuration validation and dependency-aware readiness | M0-02 | 1–2 days |
-| M0-05 | `READY` | Migration tool and initial schema conventions with forward and clean-database tests | M0-04 | 1–2 days |
-| M0-06 | `READY` | Shared API response/error, request ID, JSON and pagination conventions | None | 1–2 days |
-| M0-07 | `READY` | CI runs `make check`, documentation checks and secret-safe validation | None | 1–2 days |
-| M0-08 | `BLOCKED` | G-01 and G-02 decision records approved in both languages | Product owner | 0.5–1 day decision session |
-| M0-09 | `PLANNED` | Integration-test harness provisions isolated PostgreSQL and exercises migrations | M0-04, M0-05 | 1–2 days |
+| M0-02 | `DONE` | Compose stack starts on Apple Silicon and services pass documented smoke checks | Docker Desktop | 0.5–1 day |
+| M0-03 | `DONE` | Repeatable `infra-up`, `infra-down`, `infra-status`, and infrastructure smoke commands | M0-02 | 0.5 day |
+| M0-04 | `DONE` | PostgreSQL connection lifecycle, configuration validation and dependency-aware readiness | M0-02 | 1–2 days |
+| M0-05 | `DONE` | Migration tool and initial schema conventions with forward and clean-database tests | M0-04 | 1–2 days |
+| M0-06 | `DONE` | Shared API response/error, request ID, JSON and pagination conventions | None | 1–2 days |
+| M0-07 | `IN PROGRESS` | CI workflow is implemented and local gates pass; hosted-run evidence waits for authorized push | User-authorized push | 1–2 days |
+| M0-08 | `DONE` | G-01 and G-02 decision records approved in both languages on 2026-08-01 | Product owner | 0.5–1 day decision session |
+| M0-09 | `DONE` | Integration-test harness provisions isolated PostgreSQL and exercises migrations | M0-04, M0-05 | 1–2 days |
 
 ### M0 acceptance checks
 
@@ -128,8 +130,8 @@ encoding open product policy.
   `docker compose --env-file .env -f deployments/compose/compose.yaml up -d`.
 - PostgreSQL becomes healthy; Redis answers `PING`; the MinIO bucket exists; Registry
   `/v2/` returns the currently documented unauthenticated response.
-- A minimal image can be pushed to and pulled from `localhost:5000` under the current
-  unauthenticated development configuration.
+- A minimal image can be pushed to and pulled from the configured localhost Registry
+  port under the current unauthenticated development configuration.
 - Stop the stack without deleting named volumes; separately document the explicit,
   destructive command for removing local data.
 - Evidence: exact commands, container status, endpoint results, host architecture, and
@@ -169,6 +171,13 @@ encoding open product policy.
   database, run the API and worker, and pass all M0 checks using documented commands.
 - README and Compose documentation match the tested workflow.
 
+The local M0 exit audit passed on 2026-08-01: infrastructure smoke, migrations,
+dependency-aware health behavior, API contract tests, integration tests, `make check`,
+and documentation checks passed. M0-07 remains open only for a hosted GitHub Actions
+run, which requires an explicitly authorized push. That external evidence does not
+change the local implementation boundary and does not block starting M1-01 on this
+feature branch.
+
 ## 6. Milestone 1 — identity, ownership, and authorization
 
 Goal: implement the business control-plane core that Registry authorization will use.
@@ -176,13 +185,13 @@ No Registry token is issued in this milestone.
 
 | ID | State | Result | Dependencies | Primary requirements |
 | --- | --- | --- | --- | --- |
-| M1-01 | `BLOCKED` | User and credential/session persistence for the accepted identity mode | G-01, M0 | FR-ID-001–004 |
-| M1-02 | `PLANNED` | Login/logout/current-user API with revocation and secure session handling | M1-01 | FR-ID-001–002 |
-| M1-03 | `PLANNED` | Personal namespace creation and normalized-name rules | M1-01 | FR-ID-003, FR-ORG-004 |
-| M1-04 | `BLOCKED` | Organization and membership schema implementing the accepted role matrix | G-02, M1-01 | FR-ORG-001–004 |
-| M1-05 | `PLANNED` | Organization create/list/detail and member-management APIs | M1-04 | FR-ORG-001–003 |
-| M1-06 | `BLOCKED` | Central authorization policy service with table-driven capability tests | G-02, M1-03, M1-04 | FR-AUTHZ-001–003 |
-| M1-07 | `PLANNED` | Repository model, explicit visibility and uniqueness constraints | M1-03, M1-04 | FR-REP-001–002 |
+| M1-01 | `DONE` | User, local credential, session, and administrator-invitation persistence for the accepted identity mode | G-01, M0 local exit | FR-ID-001–004 |
+| M1-02 | `DONE` | Login/logout/current-user API with revocation and secure session handling | M1-01 | FR-ID-001–002 |
+| M1-03 | `DONE` | Personal namespace creation and normalized-name rules | M1-01 | FR-ID-003, FR-ORG-004 |
+| M1-04 | `DONE` | Organization and membership schema implementing the accepted role matrix | G-02, M1-01 | FR-ORG-001–004 |
+| M1-05 | `DONE` | Organization create/list/detail and member-management APIs | M1-04 | FR-ORG-001–003 |
+| M1-06 | `DONE` | Central authorization policy service with table-driven capability tests | G-02, M1-03, M1-04 | FR-AUTHZ-001–003 |
+| M1-07 | `READY` | Repository model, explicit visibility and uniqueness constraints | M1-03, M1-04 | FR-REP-001–002 |
 | M1-08 | `PLANNED` | Repository create/list/detail/update APIs using policy checks | M1-06, M1-07 | FR-REP-001–005 |
 | M1-09 | `PLANNED` | Typed frontend API contracts and minimal authentication/organization/repository flows | M1-02, M1-05, M1-08 | Required journeys 1–3 |
 | M1-10 | `PLANNED` | Cross-tenant isolation integration suite | M1-08 | FR-AUTHZ-001–002 |
@@ -314,23 +323,15 @@ operator workflow, and failure-recovery test. This milestone is not a single rel
 
 This is the recommended order from the current repository state:
 
-1. **Finish M0-02:** complete the Compose runtime smoke and update its bilingual guide
-   with exact evidence and limitations.
-2. **Implement M0-03:** add safe Make targets or scripts for infrastructure lifecycle
-   and non-destructive status/smoke checks.
-3. **Close G-01 and G-02:** conduct one product decision session covering D-001 through
-   D-006 and commit bilingual decision records.
-4. **Implement M0-04:** add PostgreSQL configuration, pool lifecycle, readiness and
-   tests without creating product tables.
-5. **Implement M0-05 and M0-09:** choose migrations, create the schema baseline and
-   integration harness.
-6. **Implement M0-06:** define API conventions before the first product endpoint.
-7. **Implement M0-07:** establish CI and documentation checks.
-8. Re-estimate M1 from accepted role and identity decisions, then begin M1-01.
+1. **Implement M1-07:** add the repository model with explicit visibility and
+   namespace/name uniqueness.
+2. **Implement M1-08:** expose repository APIs only through the centralized policy.
+3. **Finish M0-07 hosted evidence:** after the user authorizes a push, confirm the
+   configured GitHub Actions workflow passes `make check` and the isolated PostgreSQL
+   suite.
 
-Tasks 3, 4, 6 and 7 can proceed independently after their own prerequisites are
-clear. Keep commits small enough that one work package and its tests can be reviewed
-together.
+Item 3 is an external validation task and can proceed independently. Keep commits small
+enough that one work package and its tests can be reviewed together.
 
 ## 12. Validation strategy
 

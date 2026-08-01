@@ -89,12 +89,12 @@ As of 2026-08-01, the repository contains:
 
 | Area | Implemented now | Not implemented yet |
 | --- | --- | --- |
-| Go API | Process composition, configuration, graceful shutdown, liveness and readiness endpoints | Database adapters, identity, organizations, repositories, tokens, metadata APIs |
+| Go API | Process composition, PostgreSQL lifecycle, health, local session APIs, and organization/member APIs | Account bootstrap/invitation redemption, repositories, Registry tokens, metadata APIs |
 | Go worker | Configured polling loop and graceful shutdown | PostgreSQL job claiming and security jobs |
 | Web | Next.js application scaffold, shared providers, typed health API schema | Product navigation, authentication and registry workflows |
 | OCI data plane | Compose definitions for Distribution backed by MinIO | Token authentication, event integration and end-to-end authorized push/pull |
-| Infrastructure | Compose definitions for PostgreSQL, Redis, MinIO and Distribution | Application connections, migrations and production deployment |
-| Quality | Go and web unit checks plus repository-wide `make check` | Integration and end-to-end test suites |
+| Infrastructure | Compose definitions for PostgreSQL, Redis, MinIO and Distribution; control-plane PostgreSQL connection and versioned GORM migration foundation | Worker/Redis connections, product-schema migrations and production deployment |
+| Quality | Go and web unit checks, isolated PostgreSQL migration/connection tests and repository-wide `make check` | Product integration and end-to-end test suites |
 
 The scaffold is not production-ready and must not be described as a functioning
 multi-user registry until the MVP exit criteria in section 9 pass.
@@ -114,8 +114,9 @@ when it does not block the MVP, and **DEFERRED** belongs to a later milestone.
 | FR-ID-004 | MUST | Passwords, if local credentials are approved, are never stored in plaintext and authentication endpoints are rate-limit ready. |
 | FR-ID-005 | DEFERRED | Email verification, password recovery, MFA, and additional OIDC providers follow the public-service decision. |
 
-Self-registration versus invitation-only access and local credentials versus OIDC
-remain decision gates; their implementation must not be guessed from this table.
+[D-002](decisions/d-002-registration.md) and
+[D-003](decisions/d-003-initial-identity.md) select administrator invitations and
+local username/password credentials with revocable server-side sessions for the MVP.
 
 ### 5.2 Organizations, namespaces, and authorization
 
@@ -129,8 +130,8 @@ remain decision gates; their implementation must not be guessed from this table.
 | FR-AUTHZ-002 | MUST | Denied or unavailable authorization data fails closed and never silently grants public access. |
 | FR-AUTHZ-003 | SHOULD | Authorization decisions use a single backend policy boundary that can later emit audit records. |
 
-Final role names, capabilities, and repository-specific grant inheritance are open
-decisions.
+[D-004](decisions/d-004-organization-roles.md) fixes the MVP role matrix, and
+[D-005](decisions/d-005-grant-inheritance.md) selects organization-role-only access.
 
 ### 5.3 Repositories
 
@@ -194,9 +195,9 @@ requires a pull decision to block on it.
 
 ## 6. Domain and data constraints
 
-The initial durable model is expected to cover `User`, `Organization`,
-`OrganizationMember`, `Namespace`, `Repository`, `Artifact`, and `Tag`. Session and
-credential records are added according to the accepted identity design. Security and
+The durable model now includes `User`, local credential, revocable web session, and
+administrator-invitation records. Later MVP work adds `Organization`,
+`OrganizationMember`, `Namespace`, `Repository`, `Artifact`, and `Tag`. Security and
 operations milestones later add job, scan, SBOM, signature, trust-policy, robot,
 token, and audit records.
 
@@ -294,12 +295,12 @@ The MVP is complete only when all of the following are true:
 
 | Decision | Needed before | Question |
 | --- | --- | --- |
-| D-001 Product mode | Identity and discovery contracts | Private/self-hosted first, public SaaS first, or both with an explicit initial priority? |
-| D-002 Registration | User lifecycle schema and UI | Self-registration, administrator invitation, or configurable modes? |
-| D-003 Initial identity | Session implementation | Local credentials, OIDC, or both; which provider is the MVP default? |
-| D-004 Organization roles | Membership migrations and APIs | Which roles and exact capabilities are supported? |
-| D-005 Grant inheritance | Authorization policy | Organization-role-only access or additional repository-specific grants? |
-| D-006 Public pull | Registry token flow | Anonymous pull, authenticated pull, or deployment-configurable behavior? |
+| [D-001 Product mode](decisions/d-001-product-mode.md) | Identity and discovery contracts | `ACCEPTED`: self-hosted/private deployment first; public SaaS deferred. |
+| [D-002 Registration](decisions/d-002-registration.md) | User lifecycle schema and UI | `ACCEPTED`: administrator-issued, single-use expiring invitations. |
+| [D-003 Initial identity](decisions/d-003-initial-identity.md) | Session implementation | `ACCEPTED`: local username/password credentials with revocable server-side sessions. |
+| [D-004 Organization roles](decisions/d-004-organization-roles.md) | Membership migrations and APIs | `ACCEPTED`: `OWNER`, `ADMIN`, `WRITER`, and `READER` with the recorded capability matrix. |
+| [D-005 Grant inheritance](decisions/d-005-grant-inheritance.md) | Authorization policy | `ACCEPTED`: organization-role-only access; repository-specific grants deferred. |
+| [D-006 Public pull](decisions/d-006-public-pull.md) | Registry token flow | `ACCEPTED`: anonymous pull for explicit `PUBLIC` repositories through exact-scope short-lived tokens. |
 | D-007 Security enforcement | Pull policy | Informational scans first or optional/mandatory pull blocking? |
 | D-008 Signature trust | Verification schema | Fixed keys, organization keys, OIDC keyless identities, or a combined model? |
 | D-009 Production deployment | Deployment contracts | Compose, Kubernetes, or both; which is supported first? |

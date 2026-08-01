@@ -9,9 +9,9 @@ HubCR 是面向个人开发者与组织的容器镜像中心。它围绕 OCI Reg
 成熟的 OCI 上传与下载行为交给 CNCF Distribution 处理，而不是从零重复实现。
 
 > [!IMPORTANT]
-> HubCR 目前处于早期开发阶段。仓库中已经包含可运行的项目骨架、健康检查接口
-> 和本地基础设施配置，但认证、仓库工作流、Registry Token 签发和安全能力尚未
-> 实现。当前版本不能作为生产环境镜像仓库使用。
+> HubCR 目前处于早期开发阶段。仓库中已经包含可运行的项目骨架、健康检查与本地
+> Session 认证接口以及本地基础设施配置，但账号 Bootstrap/邀请兑换、仓库工作流、
+> Registry Token 签发和安全能力尚未实现。当前版本不能作为生产环境镜像仓库使用。
 
 ## HubCR 的用途
 
@@ -46,12 +46,12 @@ docker push hubcr.io/my-organization/backend:v1.0.0
 
 | 范围 | 当前状态 |
 | --- | --- |
-| Go 控制面 | 已有可运行骨架、配置、优雅退出和健康检查接口 |
+| Go 控制面 | 已有可运行骨架、PostgreSQL 连接池生命周期、优雅退出、依赖感知健康检查和本地 Session 认证接口 |
 | 异步 Worker | 已有可运行的轮询骨架，尚未连接任务持久化 |
 | Web 应用 | 已有 Next.js 骨架、类型化 API 工具与 Query Provider |
 | OCI 数据面 | 已定义由 MinIO 提供存储的本地 CNCF Distribution 配置 |
-| PostgreSQL 与 Redis | 已定义本地 Compose 服务，应用适配器尚未连接 |
-| 用户、组织与仓库 | 已预留模块边界，领域行为尚未实现 |
+| PostgreSQL 与 Redis | 已定义本地 Compose 服务；控制面已连接 PostgreSQL，Redis 尚未接入 |
+| 用户、组织与仓库 | 已有身份/Session API、个人 Namespace、组织/成员 API 与集中能力 Policy；账号 Bootstrap 与仓库仍待实现 |
 | Registry Token 服务 | 已预留架构边界，令牌签发尚未实现 |
 | Trivy 与 Cosign | 已预留 Worker 边界，集成尚未实现 |
 
@@ -124,7 +124,7 @@ HubCR/
 | 控制面与 Worker | Go 1.26、标准库 HTTP Server |
 | Web 应用 | Next.js 16、React 19、TypeScript |
 | UI 与客户端数据 | Tailwind CSS、TanStack Query、Zod |
-| 主数据库 | PostgreSQL |
+| 主数据库 | PostgreSQL、GORM 及基于 pgx 的 GORM Driver |
 | 缓存与协调 | Redis |
 | OCI Registry | CNCF Distribution |
 | 对象存储 | S3 兼容存储；本地开发使用 MinIO |
@@ -201,11 +201,14 @@ curl --fail http://localhost:8080/api/v1/health/live
 curl --fail http://localhost:8080/api/v1/health/ready
 ```
 
-两个接口当前都会返回：
+存活检查只反映进程状态；就绪检查会检查 PostgreSQL，数据库可访问时才返回 `200`：
 
 ```json
 {"status":"ok"}
 ```
+
+PostgreSQL 不可用时，就绪检查返回 `503` 与 `{"status":"unavailable"}`，存活检查
+仍保持 `200`。
 
 停止本地基础设施：
 
@@ -220,7 +223,16 @@ docker compose --env-file .env -f deployments/compose/compose.yaml down
 | `make dev-api` | 运行 Go 控制面 |
 | `make dev-worker` | 运行异步 Worker |
 | `make dev-web` | 运行 Next.js 开发服务器 |
+| `make db-migrate` | 应用仅向前的 PostgreSQL 迁移 |
+| `make infra-config` | 验证本地 Compose 配置 |
+| `make infra-up` | 启动本地基础设施且不改变命名卷 |
+| `make infra-down` | 停止本地基础设施且不删除命名卷 |
+| `make infra-status` | 显示全部本地基础设施容器状态 |
+| `make infra-smoke` | 检查 PostgreSQL、Redis、MinIO 和 Distribution |
 | `make test` | 运行 Go 与前端单元测试 |
+| `make test-integration` | 提供隔离 PostgreSQL 并运行后端集成测试 |
+| `make check-docs` | 验证双语 Markdown 配对、链接、空白与文件末尾换行 |
+| `make check-secrets` | 扫描已跟踪文本中的高置信度凭据模式 |
 | `make check` | 运行格式检查、Vet、测试、类型检查、Lint 和生产构建 |
 
 请求代码审查或提交完整改动之前必须运行 `make check`。
@@ -231,6 +243,12 @@ docker compose --env-file .env -f deployments/compose/compose.yaml down
 | --- | --- | --- |
 | `HUBCR_API_ADDRESS` | `:8080` | 控制面监听地址 |
 | `HUBCR_SHUTDOWN_TIMEOUT` | `10s` | HTTP 优雅退出超时 |
+| `HUBCR_DATABASE_URL` | 本地开发 PostgreSQL URL | 控制面 PostgreSQL 连接 URL |
+| `HUBCR_DATABASE_CONNECT_TIMEOUT` | `5s` | 建立 PostgreSQL 连接的超时时间 |
+| `HUBCR_DATABASE_HEALTH_TIMEOUT` | `2s` | 就绪数据库检查的超时时间 |
+| `HUBCR_DATABASE_MAX_CONNECTIONS` | `10` | 控制面 PostgreSQL 连接池上限 |
+| `HUBCR_SESSION_TTL` | `24h` | 可撤销 Web Session 的有效期 |
+| `HUBCR_SESSION_COOKIE_SECURE` | `false` | 本地 HTTP Cookie 模式；所有 HTTPS 部署必须设为 `true` |
 | `HUBCR_WORKER_POLL_INTERVAL` | `5s` | Worker 轮询间隔 |
 | `NEXT_PUBLIC_API_BASE_URL` | `http://localhost:8080` | 浏览器可见的控制面地址 |
 | `POSTGRES_DB` | `hubcr` | 本地 PostgreSQL 数据库 |
@@ -238,6 +256,7 @@ docker compose --env-file .env -f deployments/compose/compose.yaml down
 | `POSTGRES_PASSWORD` | 仅供开发 | 本地 PostgreSQL 密码 |
 | `MINIO_ROOT_USER` | `hubcr` | 本地 MinIO 管理员 |
 | `MINIO_ROOT_PASSWORD` | 仅供开发 | 本地 MinIO 密码 |
+| `HUBCR_REGISTRY_PORT` | `5000` | OCI Distribution 发布到本机的端口 |
 
 ## 核心安全与数据规则
 
@@ -263,6 +282,7 @@ docker compose --env-file .env -f deployments/compose/compose.yaml down
 | 可执行开发计划 | [Development plan](docs/development-plan.md) | [开发计划](docs/development-plan.zh-CN.md) |
 | 架构 | [Architecture](docs/architecture.md) | [架构](docs/architecture.zh-CN.md) |
 | 开发规范 | [Development](docs/development.md) | [开发规范](docs/development.zh-CN.md) |
+| 控制面 API 契约 | [API](docs/api.md) | [API](docs/api.zh-CN.md) |
 | AI 指令层级 | [Instructions](AGENTS.md) | [AI 指令](AGENTS.zh-CN.md) |
 | 本地基础设施 | [Compose](deployments/compose/README.md) | [本地基础设施](deployments/compose/README.zh-CN.md) |
 | Web 应用 | [Web](frontend/README.md) | [Web 应用](frontend/README.zh-CN.md) |

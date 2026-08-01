@@ -12,8 +12,9 @@ reimplemented.
 
 > [!IMPORTANT]
 > HubCR is in early development. The repository contains a runnable project scaffold,
-> health endpoints, and local infrastructure definitions. Authentication, repository
-> workflows, registry token issuance, and security features are not implemented yet.
+> health and local-session authentication endpoints, and local infrastructure
+> definitions. Account bootstrap/invitation redemption, repository workflows,
+> registry token issuance, and security features are not implemented yet.
 > Do not use the current version as a production registry.
 
 ## What HubCR is for
@@ -49,12 +50,12 @@ docker push hubcr.io/my-organization/backend:v1.0.0
 
 | Area | Current status |
 | --- | --- |
-| Go control plane | Runnable scaffold with configuration, graceful shutdown, and health endpoints |
+| Go control plane | Runnable scaffold with PostgreSQL pool lifecycle, graceful shutdown, dependency-aware health, and local-session authentication endpoints |
 | Asynchronous worker | Runnable polling scaffold; job persistence is not connected |
 | Web application | Next.js scaffold with typed API utilities and query provider |
 | OCI data plane | Local CNCF Distribution configuration backed by MinIO |
-| PostgreSQL and Redis | Local Compose services defined; application adapters are not connected |
-| Users, organizations, and repositories | Module boundaries reserved; domain behavior is pending |
+| PostgreSQL and Redis | Local Compose services defined; the control plane connects to PostgreSQL, while Redis is not connected |
+| Users, organizations, and repositories | Identity/session APIs, personal namespaces, organization/member APIs, and centralized capability policy exist; account bootstrap and repositories are pending |
 | Registry token service | Architecture reserved; token issuance is pending |
 | Trivy and Cosign | Worker boundaries reserved; integrations are pending |
 
@@ -131,7 +132,7 @@ HubCR/
 | Control plane and worker | Go 1.26, standard library HTTP server |
 | Web application | Next.js 16, React 19, TypeScript |
 | UI and client data | Tailwind CSS, TanStack Query, Zod |
-| Primary database | PostgreSQL |
+| Primary database | PostgreSQL with GORM and the pgx-based GORM driver |
 | Cache and coordination | Redis |
 | OCI registry | CNCF Distribution |
 | Object storage | S3-compatible storage; MinIO for local development |
@@ -209,11 +210,15 @@ curl --fail http://localhost:8080/api/v1/health/live
 curl --fail http://localhost:8080/api/v1/health/ready
 ```
 
-Both endpoints currently return:
+Liveness remains process-oriented. Readiness checks PostgreSQL and returns `200` only
+while the database is reachable:
 
 ```json
 {"status":"ok"}
 ```
+
+When PostgreSQL is unavailable, readiness returns `503` with
+`{"status":"unavailable"}` while liveness remains `200`.
 
 Stop the local infrastructure with:
 
@@ -228,7 +233,16 @@ docker compose --env-file .env -f deployments/compose/compose.yaml down
 | `make dev-api` | Run the Go control plane |
 | `make dev-worker` | Run the asynchronous worker |
 | `make dev-web` | Run the Next.js development server |
+| `make db-migrate` | Apply forward-only PostgreSQL migrations |
+| `make infra-config` | Validate the local Compose configuration |
+| `make infra-up` | Start local infrastructure without changing named volumes |
+| `make infra-down` | Stop local infrastructure without deleting named volumes |
+| `make infra-status` | Show all local infrastructure container states |
+| `make infra-smoke` | Check PostgreSQL, Redis, MinIO, and Distribution |
 | `make test` | Run Go and frontend unit tests |
+| `make test-integration` | Provision isolated PostgreSQL and run backend integration tests |
+| `make check-docs` | Validate bilingual Markdown pairs, links, whitespace, and final newlines |
+| `make check-secrets` | Scan tracked text for high-confidence credential patterns |
 | `make check` | Run formatting checks, vet, tests, type checking, lint, and production build |
 
 Run `make check` before requesting review or committing a completed change.
@@ -239,6 +253,12 @@ Run `make check` before requesting review or committing a completed change.
 | --- | --- | --- |
 | `HUBCR_API_ADDRESS` | `:8080` | Control-plane listen address |
 | `HUBCR_SHUTDOWN_TIMEOUT` | `10s` | Graceful HTTP shutdown timeout |
+| `HUBCR_DATABASE_URL` | local development PostgreSQL URL | Control-plane PostgreSQL connection URL |
+| `HUBCR_DATABASE_CONNECT_TIMEOUT` | `5s` | Timeout for establishing a PostgreSQL connection |
+| `HUBCR_DATABASE_HEALTH_TIMEOUT` | `2s` | Timeout for a readiness database check |
+| `HUBCR_DATABASE_MAX_CONNECTIONS` | `10` | Maximum control-plane PostgreSQL pool size |
+| `HUBCR_SESSION_TTL` | `24h` | Revocable web-session lifetime |
+| `HUBCR_SESSION_COOKIE_SECURE` | `false` | Local HTTP cookie mode; set `true` for every HTTPS deployment |
 | `HUBCR_WORKER_POLL_INTERVAL` | `5s` | Worker polling interval |
 | `NEXT_PUBLIC_API_BASE_URL` | `http://localhost:8080` | Browser-visible control-plane base URL |
 | `POSTGRES_DB` | `hubcr` | Local PostgreSQL database |
@@ -246,6 +266,7 @@ Run `make check` before requesting review or committing a completed change.
 | `POSTGRES_PASSWORD` | development only | Local PostgreSQL password |
 | `MINIO_ROOT_USER` | `hubcr` | Local MinIO administrator |
 | `MINIO_ROOT_PASSWORD` | development only | Local MinIO password |
+| `HUBCR_REGISTRY_PORT` | `5000` | Local host port published for OCI Distribution |
 
 ## Core security and data rules
 
@@ -275,6 +296,7 @@ must link to and remain synchronized with its Simplified Chinese counterpart.
 | Executable development plan | [Development plan](docs/development-plan.md) | [开发计划](docs/development-plan.zh-CN.md) |
 | Architecture | [Architecture](docs/architecture.md) | [架构](docs/architecture.zh-CN.md) |
 | Development standards | [Development](docs/development.md) | [开发规范](docs/development.zh-CN.md) |
+| Control-plane API contract | [API](docs/api.md) | [API](docs/api.zh-CN.md) |
 | AI instruction hierarchy | [Instructions](AGENTS.md) | [AI 指令](AGENTS.zh-CN.md) |
 | Local infrastructure | [Compose](deployments/compose/README.md) | [本地基础设施](deployments/compose/README.zh-CN.md) |
 | Web application | [Web](frontend/README.md) | [Web 应用](frontend/README.zh-CN.md) |
