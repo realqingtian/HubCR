@@ -131,6 +131,9 @@ func (s *Store) NamespaceAccessByName(
 			return repositories.NamespaceAccess{}, classify("find namespace organization", err)
 		}
 		var membership membershipRecord
+		if actorUserID == "" {
+			return namespaceAccessFromRecords(namespace, organization, membership, actorUserID), nil
+		}
 		err := s.database.WithContext(ctx).
 			Where("organization_id = ? AND user_id = ?", organization.ID, actorUserID).
 			First(&membership).Error

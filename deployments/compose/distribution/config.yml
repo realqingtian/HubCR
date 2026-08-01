@@ -15,7 +15,14 @@ storage:
     v4auth: true
     rootdirectory: /registry
   delete:
-    enabled: true
+    enabled: false
+
+auth:
+  token:
+    realm: http://localhost:5000/token
+    service: hubcr-registry
+    issuer: hubcr-token-service
+    jwks: /run/hubcr/registry-auth/jwks.json
 
 http:
   addr: :5000

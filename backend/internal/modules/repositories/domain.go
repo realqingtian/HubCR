@@ -79,6 +79,14 @@ type RepositoryPage struct {
 	NextAfter string
 }
 
+// AuthorizationContext contains validated repository and namespace state for
+// consumers such as Registry token authorization. It deliberately does not decide
+// whether a caller may perform an action.
+type AuthorizationContext struct {
+	Repository Repository
+	Namespace  NamespaceAccess
+}
+
 // New constructs repository state after authorization has been decided by the
 // caller. Repository creation APIs must perform their capability check before
 // persisting the returned value.

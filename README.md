@@ -13,10 +13,10 @@ reimplemented.
 > [!IMPORTANT]
 > HubCR is in early development. The repository contains a runnable control plane,
 > local-session, organization and repository APIs, a minimal authenticated web
-> workspace, and local infrastructure definitions. Account bootstrap/invitation
-> redemption, Registry integration, registry token issuance, artifact metadata, and
-> security features are not implemented yet. Do not use the current version as a
-> production registry.
+> workspace, short-lived Registry token issuance, and a token-protected local
+> Distribution gateway. Account bootstrap/invitation redemption, artifact metadata,
+> event reconciliation, and security features are not implemented yet. Do not use
+> the current version as a production registry.
 
 ## What HubCR is for
 
@@ -54,10 +54,10 @@ docker push hubcr.io/my-organization/backend:v1.0.0
 | Go control plane | Runnable service with PostgreSQL lifecycle, dependency-aware health, local sessions, organizations, repositories, and centralized authorization |
 | Asynchronous worker | Runnable polling scaffold; job persistence is not connected |
 | Web application | Minimal authenticated Next.js workspace with typed, runtime-validated auth, organization/member, and repository flows |
-| OCI data plane | Local CNCF Distribution configuration backed by MinIO |
+| OCI data plane | Local gateway routes `/v2/` to token-protected CNCF Distribution backed by MinIO and `/token` to the Go control plane |
 | PostgreSQL and Redis | Local Compose services defined; the control plane connects to PostgreSQL, while Redis is not connected |
 | Users, organizations, and repositories | Identity/session APIs, personal namespaces, organization/member APIs, centralized capability policy, policy-protected repository APIs, and the corresponding minimal web workspace exist; account bootstrap/invitation redemption remains pending |
-| Registry token service | Architecture reserved; token issuance is pending |
+| Registry token service | Feature-gated RS256 token issuance with exact repository/action scopes, JWKS trust and rotation-ready verification |
 | Trivy and Cosign | Worker boundaries reserved; integrations are pending |
 
 ## Architecture
@@ -172,11 +172,12 @@ cd ..
 ### 3. Start local infrastructure
 
 ```bash
-docker compose --env-file .env -f deployments/compose/compose.yaml up -d
+make infra-up
 ```
 
-This starts PostgreSQL, Redis, MinIO, and CNCF Distribution. See the
-[local infrastructure guide](deployments/compose/README.md) for ports and details.
+This generates ignored local Registry signing material when needed, then starts
+PostgreSQL, Redis, MinIO, CNCF Distribution, and the local gateway. See the [local
+infrastructure guide](deployments/compose/README.md) for ports and details.
 
 ### 4. Start the applications
 
@@ -200,7 +201,7 @@ Default local endpoints:
 | --- | --- |
 | Web application | `http://localhost:3000` |
 | Go control plane | `http://localhost:8080` |
-| OCI Distribution | `http://localhost:5000` |
+| OCI gateway | `http://localhost:5000` |
 | MinIO API | `http://localhost:9000` |
 | MinIO console | `http://localhost:9001` |
 
@@ -224,7 +225,7 @@ When PostgreSQL is unavailable, readiness returns `503` with
 Stop the local infrastructure with:
 
 ```bash
-docker compose --env-file .env -f deployments/compose/compose.yaml down
+make infra-down
 ```
 
 ## Development commands
@@ -235,6 +236,7 @@ docker compose --env-file .env -f deployments/compose/compose.yaml down
 | `make dev-worker` | Run the asynchronous worker |
 | `make dev-web` | Run the Next.js development server |
 | `make db-migrate` | Apply forward-only PostgreSQL migrations |
+| `make registry-dev-keys` | Generate or validate ignored local Registry RSA/JWKS material |
 | `make infra-config` | Validate the local Compose configuration |
 | `make infra-up` | Start local infrastructure without changing named volumes |
 | `make infra-down` | Stop local infrastructure without deleting named volumes |
@@ -243,6 +245,7 @@ docker compose --env-file .env -f deployments/compose/compose.yaml down
 | `make test` | Run Go and frontend unit tests |
 | `make test-integration` | Provision isolated PostgreSQL and run backend integration tests |
 | `make test-m1-e2e` | Run M1 journeys 1–3 through real PostgreSQL, Go API, Next.js, and Chromium |
+| `make test-m2-registry-e2e` | Run isolated real Docker push/pull and Registry authorization checks |
 | `make check-docs` | Validate bilingual Markdown pairs, links, whitespace, and final newlines |
 | `make check-secrets` | Scan tracked text for high-confidence credential patterns |
 | `make check` | Run formatting checks, vet, tests, type checking, lint, and production build |
@@ -261,6 +264,14 @@ Run `make check` before requesting review or committing a completed change.
 | `HUBCR_DATABASE_MAX_CONNECTIONS` | `10` | Maximum control-plane PostgreSQL pool size |
 | `HUBCR_SESSION_TTL` | `24h` | Revocable web-session lifetime |
 | `HUBCR_SESSION_COOKIE_SECURE` | `false` | Local HTTP cookie mode; set `true` for every HTTPS deployment |
+| `HUBCR_REGISTRY_AUTH_ENABLED` | `false` | Enable `/token`; `make dev-api` enables it with isolated local signing material |
+| `HUBCR_REGISTRY_EXTERNAL_URL` | none | Explicit external Registry origin; required when Registry auth is enabled |
+| `HUBCR_REGISTRY_ALLOW_INSECURE_HTTP` | `false` | Allow an explicit HTTP Registry origin only for local development |
+| `HUBCR_REGISTRY_SERVICE` | `hubcr-registry` | Distribution challenge Service and JWT Audience |
+| `HUBCR_REGISTRY_ISSUER` | `hubcr-token-service` | JWT Issuer shared with Distribution |
+| `HUBCR_REGISTRY_TOKEN_TTL` | `5m` | Short-lived Registry Token TTL; accepted range is `1m`–`15m` |
+| `HUBCR_REGISTRY_TOKEN_PRIVATE_KEY_FILE` | none | Absolute read-only path to the active RSA private key |
+| `HUBCR_REGISTRY_TOKEN_JWKS_FILE` | none | Absolute path to the trusted public JWKS containing the active and optional retiring keys |
 | `HUBCR_WORKER_POLL_INTERVAL` | `5s` | Worker polling interval |
 | `HUBCR_CONTROL_PLANE_URL` | `http://127.0.0.1:8080` | Server-side target for the Next.js same-origin `/api` rewrite |
 | `NEXT_PUBLIC_API_BASE_URL` | same origin | Optional browser-visible override for a CORS-enabled endpoint |
@@ -269,7 +280,11 @@ Run `make check` before requesting review or committing a completed change.
 | `POSTGRES_PASSWORD` | development only | Local PostgreSQL password |
 | `MINIO_ROOT_USER` | `hubcr` | Local MinIO administrator |
 | `MINIO_ROOT_PASSWORD` | development only | Local MinIO password |
-| `HUBCR_REGISTRY_PORT` | `5000` | Local host port published for OCI Distribution |
+| `HUBCR_REGISTRY_PORT` | `5000` | Local host port published for the OCI gateway |
+| `HUBCR_POSTGRES_PORT` | `5432` | Local PostgreSQL host port |
+| `HUBCR_REDIS_PORT` | `6379` | Local Redis host port |
+| `HUBCR_MINIO_PORT` | `9000` | Local MinIO API host port |
+| `HUBCR_MINIO_CONSOLE_PORT` | `9001` | Local MinIO console host port |
 
 ## Core security and data rules
 
@@ -300,6 +315,7 @@ must link to and remain synchronized with its Simplified Chinese counterpart.
 | Architecture | [Architecture](docs/architecture.md) | [架构](docs/architecture.zh-CN.md) |
 | Development standards | [Development](docs/development.md) | [开发规范](docs/development.zh-CN.md) |
 | Control-plane API contract | [API](docs/api.md) | [API](docs/api.zh-CN.md) |
+| Registry authentication protocol | [Registry auth](docs/registry-authentication.md) | [Registry 认证](docs/registry-authentication.zh-CN.md) |
 | AI instruction hierarchy | [Instructions](AGENTS.md) | [AI 指令](AGENTS.zh-CN.md) |
 | Local infrastructure | [Compose](deployments/compose/README.md) | [本地基础设施](deployments/compose/README.zh-CN.md) |
 | Web application | [Web](frontend/README.md) | [Web 应用](frontend/README.zh-CN.md) |

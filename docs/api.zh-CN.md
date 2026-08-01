@@ -77,6 +77,25 @@ Liveness 只反映进程状态。必需的 PostgreSQL 不可访问时，Readines
 - Login 在查询凭据前调用显式限流 Adapter。当前自托管基础暂用 Allow-All Adapter，
   直到接入 Redis 限流；公网服务模式仍不可用。
 
+## Registry Token 协议
+
+已批准的 [Registry 认证协议](registry-authentication.zh-CN.md) 定义不属于
+`/api/v1` 的 `GET /token` 契约。
+
+- Registry 认证由显式 Feature Gate 控制并默认关闭，直到 M2-04 连接 Distribution
+  与本地 Gateway。
+- Endpoint 接受精确配置的 `service`、可重复的规范 Repository `scope`、可选
+  `client_id` 与可选 HTTP Basic 凭据。
+- Basic 凭据验证不会创建 Web Session。Cookie 与 Bearer 凭据会按照协议被忽略或
+  拒绝。
+- 成功响应包含内容相同的 `token` 与 `access_token` JWT、`expires_in` 和
+  `issued_at`；所有响应均不可缓存。
+- JWT 只包含分别与策略求交集后的 `pull` 和 `push` Action。`delete` 可被识别，
+  但 M2 永不授予。
+- 协议错误使用 Distribution `errors` 数组，而不是业务 API Error Envelope。
+- 启用路由需要显式外部 Origin、Service/Audience、Issuer、60–900 秒 TTL 和只读
+  RS256 私钥绝对路径，以及包含活动密钥的可信公开 JWKS。
+
 ## 组织
 
 所有组织端点都要求有效的 `hubcr_session` Cookie。

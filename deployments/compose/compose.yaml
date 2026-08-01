@@ -8,7 +8,7 @@ services:
       POSTGRES_USER: ${POSTGRES_USER:-hubcr}
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-hubcr-dev-only}
     ports:
-      - "5432:5432"
+      - "${HUBCR_POSTGRES_PORT:-5432}:5432"
     volumes:
       - postgres-data:/var/lib/postgresql/data
     healthcheck:
@@ -21,7 +21,7 @@ services:
     image: redis:7-alpine
     command: ["redis-server", "--appendonly", "yes"]
     ports:
-      - "6379:6379"
+      - "${HUBCR_REDIS_PORT:-6379}:6379"
     volumes:
       - redis-data:/data
 
@@ -32,8 +32,8 @@ services:
       MINIO_ROOT_USER: ${MINIO_ROOT_USER:-hubcr}
       MINIO_ROOT_PASSWORD: ${MINIO_ROOT_PASSWORD:-hubcr-dev-only}
     ports:
-      - "9000:9000"
-      - "9001:9001"
+      - "${HUBCR_MINIO_PORT:-9000}:9000"
+      - "${HUBCR_MINIO_CONSOLE_PORT:-9001}:9001"
     volumes:
       - minio-data:/data
 
@@ -60,10 +60,30 @@ services:
     environment:
       REGISTRY_STORAGE_S3_ACCESSKEY: ${MINIO_ROOT_USER:-hubcr}
       REGISTRY_STORAGE_S3_SECRETKEY: ${MINIO_ROOT_PASSWORD:-hubcr-dev-only}
+      REGISTRY_AUTH_TOKEN_REALM: http://localhost:${HUBCR_REGISTRY_PORT:-5000}/token
+      REGISTRY_AUTH_TOKEN_SERVICE: ${HUBCR_REGISTRY_SERVICE:-hubcr-registry}
+      REGISTRY_AUTH_TOKEN_ISSUER: ${HUBCR_REGISTRY_ISSUER:-hubcr-token-service}
+      REGISTRY_AUTH_TOKEN_JWKS: /run/hubcr/registry-auth/jwks.json
+    expose:
+      - "5000"
+    volumes:
+      - ./distribution/config.yml:/etc/distribution/config.yml:ro
+      - ${HUBCR_REGISTRY_AUTH_DIR:-../../.data/registry-auth}:/run/hubcr/registry-auth:ro
+
+  gateway:
+    image: nginx:1.29-alpine
+    depends_on:
+      - registry
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    environment:
+      HUBCR_GATEWAY_API_HOST: host.docker.internal
+      HUBCR_GATEWAY_API_PORT: ${HUBCR_API_PORT:-8080}
+      NGINX_ENVSUBST_FILTER: ^HUBCR_GATEWAY_
     ports:
       - "${HUBCR_REGISTRY_PORT:-5000}:5000"
     volumes:
-      - ./distribution/config.yml:/etc/distribution/config.yml:ro
+      - ./gateway/default.conf.template:/etc/nginx/templates/hubcr.conf.template:ro
 
 volumes:
   postgres-data:

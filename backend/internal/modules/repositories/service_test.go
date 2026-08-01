@@ -161,6 +161,68 @@ func TestServiceFailsClosedOnMissingRepositoryVisibility(t *testing.T) {
 	}
 }
 
+func TestAuthorizationContextReturnsValidatedStateWithoutDiscoveryFiltering(t *testing.T) {
+	t.Parallel()
+	repository := serviceRepository(VisibilityPrivate)
+	store := &serviceStore{access: organizationAccess(""), byName: repository}
+	service := newTestService(t, store)
+
+	result, err := service.AuthorizationContext(
+		context.Background(), "", "platform-team", "backend",
+	)
+	if err != nil {
+		t.Fatalf("AuthorizationContext() error = %v", err)
+	}
+	if result.Repository != repository || result.Namespace.OrganizationRole != "" {
+		t.Fatalf("AuthorizationContext() = %#v", result)
+	}
+}
+
+func TestAuthorizationContextRejectsMismatchedPersistenceState(t *testing.T) {
+	t.Parallel()
+	tests := []struct {
+		name       string
+		access     NamespaceAccess
+		repository Repository
+	}{
+		{
+			name: "repository namespace mismatch", access: personalAccess(true),
+			repository: func() Repository {
+				value := serviceRepository(VisibilityPrivate)
+				value.NamespaceID = "different"
+				return value
+			}(),
+		},
+		{
+			name: "repository name mismatch", access: personalAccess(true),
+			repository: func() Repository {
+				value := serviceRepository(VisibilityPrivate)
+				value.Name = "different"
+				return value
+			}(),
+		},
+		{
+			name: "personal access carries organization state",
+			access: func() NamespaceAccess {
+				value := personalAccess(true)
+				value.OrganizationID = "unexpected"
+				return value
+			}(),
+			repository: serviceRepository(VisibilityPrivate),
+		},
+	}
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			service := newTestService(t, &serviceStore{access: test.access, byName: test.repository})
+			if _, err := service.AuthorizationContext(
+				context.Background(), serviceUserID, "platform-team", "backend",
+			); !errors.Is(err, ErrInvalidRepository) {
+				t.Fatalf("AuthorizationContext() error = %v, want ErrInvalidRepository", err)
+			}
+		})
+	}
+}
+
 func newTestService(t *testing.T, store *serviceStore) *Service {
 	t.Helper()
 	service, err := NewService(store, authorization.NewPolicy(), func() time.Time {

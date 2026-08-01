@@ -1,0 +1,39 @@
+server {
+    listen 5000;
+    server_name _;
+
+    client_max_body_size 0;
+    proxy_http_version 1.1;
+    proxy_request_buffering off;
+    proxy_buffering off;
+    proxy_read_timeout 900s;
+    proxy_send_timeout 900s;
+
+    location /v2/ {
+        proxy_set_header Host $http_host;
+        proxy_set_header X-Forwarded-Host $http_host;
+        proxy_set_header X-Forwarded-Proto $scheme;
+        proxy_set_header X-Request-ID $request_id;
+        proxy_pass http://registry:5000;
+    }
+
+    location = /token {
+        proxy_set_header Host $http_host;
+        proxy_set_header X-Forwarded-Host $http_host;
+        proxy_set_header X-Forwarded-Proto $scheme;
+        proxy_set_header X-Request-ID $request_id;
+        proxy_pass http://${HUBCR_GATEWAY_API_HOST}:${HUBCR_GATEWAY_API_PORT};
+    }
+
+    location /api/ {
+        proxy_set_header Host $http_host;
+        proxy_set_header X-Forwarded-Host $http_host;
+        proxy_set_header X-Forwarded-Proto $scheme;
+        proxy_set_header X-Request-ID $request_id;
+        proxy_pass http://${HUBCR_GATEWAY_API_HOST}:${HUBCR_GATEWAY_API_PORT};
+    }
+
+    location / {
+        return 404;
+    }
+}

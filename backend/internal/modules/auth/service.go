@@ -91,20 +91,9 @@ func (s *Service) Login(ctx context.Context, input LoginInput) (LoginResult, err
 		return LoginResult{}, fmt.Errorf("check login limit: %w", err)
 	}
 
-	identity, err := s.store.CredentialByUsername(ctx, input.Username)
+	user, err := s.AuthenticatePassword(ctx, input.Username, input.Password)
 	if err != nil {
-		if !errors.Is(err, ErrNotFound) {
-			return LoginResult{}, fmt.Errorf("load login credential: %w", err)
-		}
-		_, _ = s.passwords.Verify(input.Password, s.dummyPassword)
-		return LoginResult{}, ErrUnauthenticated
-	}
-	verified, err := s.passwords.Verify(input.Password, identity.Credential.PasswordHash)
-	if err != nil {
-		return LoginResult{}, fmt.Errorf("verify stored credential: %w", err)
-	}
-	if !verified {
-		return LoginResult{}, ErrUnauthenticated
+		return LoginResult{}, err
 	}
 
 	secret := make([]byte, sessionSecretBytes)
@@ -120,14 +109,36 @@ func (s *Service) Login(ctx context.Context, input LoginInput) (LoginResult, err
 	expiresAt := now.Add(s.sessionTTL)
 	if err := s.store.CreateSession(ctx, Session{
 		ID:          sessionID,
-		UserID:      identity.User.ID,
+		UserID:      user.ID,
 		TokenDigest: DigestSecret([]byte(token)),
 		ExpiresAt:   expiresAt,
 		CreatedAt:   now,
 	}); err != nil {
 		return LoginResult{}, fmt.Errorf("persist session: %w", err)
 	}
-	return LoginResult{User: identity.User, Token: token, ExpiresAt: expiresAt}, nil
+	return LoginResult{User: user, Token: token, ExpiresAt: expiresAt}, nil
+}
+
+// AuthenticatePassword verifies a local credential without creating a web session.
+// Registry adapters use this boundary so Registry credentials and browser sessions
+// remain separate.
+func (s *Service) AuthenticatePassword(ctx context.Context, username string, password []byte) (User, error) {
+	identity, err := s.store.CredentialByUsername(ctx, username)
+	if err != nil {
+		if !errors.Is(err, ErrNotFound) {
+			return User{}, fmt.Errorf("load local credential: %w", err)
+		}
+		_, _ = s.passwords.Verify(password, s.dummyPassword)
+		return User{}, ErrUnauthenticated
+	}
+	verified, err := s.passwords.Verify(password, identity.Credential.PasswordHash)
+	if err != nil {
+		return User{}, fmt.Errorf("verify stored credential: %w", err)
+	}
+	if !verified {
+		return User{}, ErrUnauthenticated
+	}
+	return identity.User, nil
 }
 
 func (s *Service) Authenticate(ctx context.Context, token string) (User, error) {

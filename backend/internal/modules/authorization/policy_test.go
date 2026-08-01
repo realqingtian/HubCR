@@ -84,6 +84,16 @@ func TestRepositoryDiscoveryRequiresPublicVisibilityOrPrivatePullCapability(t *t
 	}
 }
 
+func TestPublicRepositoryPullRequiresExplicitPublicVisibility(t *testing.T) {
+	policy := NewPolicy()
+	if !policy.AllowsPublicRepositoryPull(true) {
+		t.Fatal("explicit public repository pull was denied")
+	}
+	if policy.AllowsPublicRepositoryPull(false) {
+		t.Fatal("missing or private visibility allowed public pull")
+	}
+}
+
 func allow(roles ...organizations.Role) map[organizations.Role]bool {
 	result := make(map[organizations.Role]bool, len(roles))
 	for _, role := range roles {

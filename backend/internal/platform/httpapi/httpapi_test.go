@@ -96,6 +96,21 @@ func TestRouterMethodNotAllowedAndNotFound(t *testing.T) {
 	}
 }
 
+func TestRouterProtocolPathOwnsMethodAndResponseContract(t *testing.T) {
+	router := NewRouter()
+	router.HandleProtocol("/token", http.HandlerFunc(func(w http.ResponseWriter, request *http.Request) {
+		w.Header().Set("Content-Type", "application/registry-error+json")
+		w.WriteHeader(http.StatusTeapot)
+	}))
+	request := httptest.NewRequest(http.MethodPost, "/token", nil)
+	recorder := httptest.NewRecorder()
+	router.ServeHTTP(recorder, request)
+	if recorder.Code != http.StatusTeapot ||
+		recorder.Header().Get("Content-Type") != "application/registry-error+json" {
+		t.Fatalf("protocol response = %d %q", recorder.Code, recorder.Header().Get("Content-Type"))
+	}
+}
+
 func TestRequestIDReplacesInvalidValue(t *testing.T) {
 	request := httptest.NewRequest(http.MethodGet, "/", nil)
 	request.Header.Set(RequestIDHeader, "invalid request id with spaces")

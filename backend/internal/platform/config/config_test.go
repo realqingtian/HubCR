@@ -15,6 +15,14 @@ func TestLoadAPIDefaults(t *testing.T) {
 	t.Setenv("HUBCR_DATABASE_MAX_CONNECTIONS", "")
 	t.Setenv("HUBCR_SESSION_TTL", "")
 	t.Setenv("HUBCR_SESSION_COOKIE_SECURE", "")
+	t.Setenv("HUBCR_REGISTRY_AUTH_ENABLED", "")
+	t.Setenv("HUBCR_REGISTRY_ALLOW_INSECURE_HTTP", "")
+	t.Setenv("HUBCR_REGISTRY_EXTERNAL_URL", "")
+	t.Setenv("HUBCR_REGISTRY_SERVICE", "")
+	t.Setenv("HUBCR_REGISTRY_ISSUER", "")
+	t.Setenv("HUBCR_REGISTRY_TOKEN_TTL", "")
+	t.Setenv("HUBCR_REGISTRY_TOKEN_PRIVATE_KEY_FILE", "")
+	t.Setenv("HUBCR_REGISTRY_TOKEN_JWKS_FILE", "")
 
 	cfg, err := LoadAPI()
 	if err != nil {
@@ -44,12 +52,126 @@ func TestLoadAPIDefaults(t *testing.T) {
 	if cfg.Authentication.SessionCookieSecure {
 		t.Fatal("Authentication.SessionCookieSecure = true, want false for local HTTP default")
 	}
+	if cfg.Registry.Enabled || cfg.Registry.Service != "hubcr-registry" ||
+		cfg.Registry.Issuer != "hubcr-token-service" ||
+		cfg.Registry.TokenTTL != 5*time.Minute ||
+		cfg.Registry.ClockSkew != 30*time.Second {
+		t.Fatalf("Registry defaults = %#v", cfg.Registry)
+	}
 }
 
 func TestLoadAPIRejectsInvalidAuthenticationSettings(t *testing.T) {
 	t.Setenv("HUBCR_SESSION_COOKIE_SECURE", "sometimes")
 	if _, err := LoadAPI(); err == nil {
 		t.Fatal("LoadAPI() error = nil, want invalid boolean error")
+	}
+}
+
+func TestLoadAPIRegistryAuthenticationConfiguration(t *testing.T) {
+	t.Setenv("HUBCR_REGISTRY_AUTH_ENABLED", "true")
+	t.Setenv("HUBCR_REGISTRY_EXTERNAL_URL", "https://registry.example")
+	t.Setenv("HUBCR_REGISTRY_SERVICE", "registry.example")
+	t.Setenv("HUBCR_REGISTRY_ISSUER", "auth.registry.example")
+	t.Setenv("HUBCR_REGISTRY_TOKEN_TTL", "10m")
+	t.Setenv("HUBCR_REGISTRY_TOKEN_PRIVATE_KEY_FILE", "/run/secrets/hubcr-registry-key.pem")
+	t.Setenv("HUBCR_REGISTRY_TOKEN_JWKS_FILE", "/run/secrets/hubcr-registry-jwks.json")
+
+	cfg, err := LoadAPI()
+	if err != nil {
+		t.Fatalf("LoadAPI() error = %v", err)
+	}
+	if !cfg.Registry.Enabled ||
+		cfg.Registry.ExternalURL != "https://registry.example" ||
+		cfg.Registry.AllowInsecureHTTP ||
+		cfg.Registry.Service != "registry.example" ||
+		cfg.Registry.Issuer != "auth.registry.example" ||
+		cfg.Registry.TokenTTL != 10*time.Minute ||
+		cfg.Registry.PrivateKeyFile != "/run/secrets/hubcr-registry-key.pem" ||
+		cfg.Registry.PublicJWKSFile != "/run/secrets/hubcr-registry-jwks.json" {
+		t.Fatalf("Registry = %#v", cfg.Registry)
+	}
+}
+
+func TestLoadAPIRejectsInvalidRegistryConfiguration(t *testing.T) {
+	tests := []struct {
+		name string
+		env  map[string]string
+	}{
+		{
+			name: "HTTP without explicit local opt-in",
+			env: map[string]string{
+				"HUBCR_REGISTRY_AUTH_ENABLED":           "true",
+				"HUBCR_REGISTRY_EXTERNAL_URL":           "http://localhost:5000",
+				"HUBCR_REGISTRY_TOKEN_PRIVATE_KEY_FILE": "/tmp/key.pem",
+				"HUBCR_REGISTRY_TOKEN_JWKS_FILE":        "/tmp/jwks.json",
+			},
+		},
+		{
+			name: "origin with path",
+			env: map[string]string{
+				"HUBCR_REGISTRY_AUTH_ENABLED":           "true",
+				"HUBCR_REGISTRY_EXTERNAL_URL":           "https://registry.example/token",
+				"HUBCR_REGISTRY_TOKEN_PRIVATE_KEY_FILE": "/tmp/key.pem",
+				"HUBCR_REGISTRY_TOKEN_JWKS_FILE":        "/tmp/jwks.json",
+			},
+		},
+		{
+			name: "relative private key",
+			env: map[string]string{
+				"HUBCR_REGISTRY_AUTH_ENABLED":           "true",
+				"HUBCR_REGISTRY_EXTERNAL_URL":           "https://registry.example",
+				"HUBCR_REGISTRY_TOKEN_PRIVATE_KEY_FILE": "key.pem",
+				"HUBCR_REGISTRY_TOKEN_JWKS_FILE":        "/tmp/jwks.json",
+			},
+		},
+		{
+			name: "relative JWKS",
+			env: map[string]string{
+				"HUBCR_REGISTRY_AUTH_ENABLED":           "true",
+				"HUBCR_REGISTRY_EXTERNAL_URL":           "https://registry.example",
+				"HUBCR_REGISTRY_TOKEN_PRIVATE_KEY_FILE": "/tmp/key.pem",
+				"HUBCR_REGISTRY_TOKEN_JWKS_FILE":        "jwks.json",
+			},
+		},
+		{
+			name: "short TTL",
+			env: map[string]string{
+				"HUBCR_REGISTRY_TOKEN_TTL": "59s",
+			},
+		},
+		{
+			name: "oversized TTL",
+			env: map[string]string{
+				"HUBCR_REGISTRY_TOKEN_TTL": "16m",
+			},
+		},
+		{
+			name: "unsafe service",
+			env: map[string]string{
+				"HUBCR_REGISTRY_SERVICE": `registry"challenge`,
+			},
+		},
+	}
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			for key, value := range test.env {
+				t.Setenv(key, value)
+			}
+			if _, err := LoadAPI(); err == nil {
+				t.Fatal("LoadAPI() error = nil")
+			}
+		})
+	}
+}
+
+func TestLoadAPIAllowsExplicitLocalRegistryHTTP(t *testing.T) {
+	t.Setenv("HUBCR_REGISTRY_AUTH_ENABLED", "true")
+	t.Setenv("HUBCR_REGISTRY_ALLOW_INSECURE_HTTP", "true")
+	t.Setenv("HUBCR_REGISTRY_EXTERNAL_URL", "http://localhost:5000")
+	t.Setenv("HUBCR_REGISTRY_TOKEN_PRIVATE_KEY_FILE", "/tmp/key.pem")
+	t.Setenv("HUBCR_REGISTRY_TOKEN_JWKS_FILE", "/tmp/jwks.json")
+	if _, err := LoadAPI(); err != nil {
+		t.Fatalf("LoadAPI() error = %v", err)
 	}
 }
 

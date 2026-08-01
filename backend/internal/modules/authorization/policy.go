@@ -45,6 +45,12 @@ func (Policy) AllowsRepositoryDiscovery(isPublic, canPullPrivate bool) bool {
 	return isPublic || canPullPrivate
 }
 
+// AllowsPublicRepositoryPull implements D-006. The caller must pass true only
+// after repository visibility has been validated as explicitly PUBLIC.
+func (Policy) AllowsPublicRepositoryPull(isExplicitlyPublic bool) bool {
+	return isExplicitlyPublic
+}
+
 func (p Policy) CanAssignMember(actor, desired organizations.Role) bool {
 	if desired == organizations.RoleOwner || desired == organizations.RoleAdmin {
 		return p.AllowsOrganization(actor, ManageElevatedMembers)

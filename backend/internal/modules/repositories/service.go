@@ -117,6 +117,45 @@ func (s *Service) Detail(
 	return repository, nil
 }
 
+// AuthorizationContext resolves validated repository and namespace state without
+// applying discovery filtering. Callers must use the centralized authorization
+// policy and must not expose this result directly.
+func (s *Service) AuthorizationContext(
+	ctx context.Context,
+	actorUserID, namespaceName, repositoryName string,
+) (AuthorizationContext, error) {
+	access, err := s.access(ctx, namespaceName, actorUserID)
+	if err != nil {
+		return AuthorizationContext{}, err
+	}
+	name, err := NormalizeName(repositoryName)
+	if err != nil {
+		return AuthorizationContext{}, err
+	}
+	repository, err := s.store.ByNamespaceAndName(ctx, access.NamespaceID, name)
+	if err != nil {
+		return AuthorizationContext{}, err
+	}
+	if _, err := ParseVisibility(string(repository.Visibility)); err != nil ||
+		repository.NamespaceID != access.NamespaceID ||
+		repository.Name != name {
+		return AuthorizationContext{}, ErrInvalidRepository
+	}
+	switch access.Kind {
+	case NamespacePersonal:
+		if access.OrganizationID != "" || access.OrganizationRole != "" {
+			return AuthorizationContext{}, ErrInvalidRepository
+		}
+	case NamespaceOrganization:
+		if access.OrganizationID == "" || access.IsPersonalOwner {
+			return AuthorizationContext{}, ErrInvalidRepository
+		}
+	default:
+		return AuthorizationContext{}, ErrInvalidRepository
+	}
+	return AuthorizationContext{Repository: repository, Namespace: access}, nil
+}
+
 func (s *Service) Update(
 	ctx context.Context,
 	actorUserID, namespaceName, repositoryName string,

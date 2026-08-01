@@ -9,12 +9,16 @@ import (
 type HandlerFunc func(http.ResponseWriter, *http.Request) error
 
 type Router struct {
-	mux     *http.ServeMux
-	methods map[string]map[string]struct{}
+	mux           *http.ServeMux
+	methods       map[string]map[string]struct{}
+	protocolPaths map[string]struct{}
 }
 
 func NewRouter() *Router {
-	router := &Router{mux: http.NewServeMux(), methods: make(map[string]map[string]struct{})}
+	router := &Router{
+		mux: http.NewServeMux(), methods: make(map[string]map[string]struct{}),
+		protocolPaths: make(map[string]struct{}),
+	}
 	router.mux.HandleFunc("/", func(w http.ResponseWriter, request *http.Request) {
 		WriteError(w, request, &Error{
 			Status:  http.StatusNotFound,
@@ -42,6 +46,9 @@ func (r *Router) HandleFunc(pattern string, handler func(http.ResponseWriter, *h
 }
 
 func (r *Router) HandleHTTP(method, path string, handler http.Handler) {
+	if _, exists := r.protocolPaths[path]; exists {
+		panic("httpapi: protocol path is already registered")
+	}
 	methods, exists := r.methods[path]
 	if !exists {
 		methods = make(map[string]struct{})
@@ -62,6 +69,23 @@ func (r *Router) HandleHTTP(method, path string, handler http.Handler) {
 	}
 	methods[method] = struct{}{}
 	r.mux.Handle(method+" "+path, handler)
+}
+
+// HandleProtocol registers a path whose handler owns method dispatch and response
+// formatting. Protocol endpoints such as /token use this to avoid the business API
+// error envelope.
+func (r *Router) HandleProtocol(path string, handler http.Handler) {
+	if path == "" || handler == nil {
+		panic("httpapi: protocol path and handler must be configured")
+	}
+	if _, exists := r.methods[path]; exists {
+		panic("httpapi: method routes are already registered for protocol path")
+	}
+	if _, exists := r.protocolPaths[path]; exists {
+		panic("httpapi: protocol path is already registered")
+	}
+	r.protocolPaths[path] = struct{}{}
+	r.mux.Handle(path, handler)
 }
 
 func (r *Router) ServeHTTP(w http.ResponseWriter, request *http.Request) {

@@ -87,6 +87,28 @@ recovers automatically when the dependency returns.
   self-hosted foundation uses an allow-all adapter until Redis-backed limits are
   implemented; the public-service mode remains unavailable.
 
+## Registry token protocol
+
+The accepted [Registry authentication protocol](registry-authentication.md) owns the
+non-`/api/v1` `GET /token` contract.
+
+- Registry authentication is explicitly feature-gated and defaults to disabled until
+  M2-04 connects Distribution and the local gateway.
+- The endpoint accepts the exact configured `service`, repeatable canonical
+  repository `scope` values, optional `client_id`, and optional HTTP Basic
+  credentials.
+- Basic credentials are verified without creating a web session. Cookies and Bearer
+  credentials are ignored or rejected as specified by the protocol.
+- Successful responses contain identical `token` and `access_token` JWTs,
+  `expires_in`, and `issued_at`; every response is non-cacheable.
+- The JWT contains only independently policy-intersected `pull` and `push` actions.
+  `delete` is recognized but never granted in M2.
+- Protocol errors use the Distribution `errors` array rather than the business API
+  error envelope.
+- Enabling the route requires an explicit external origin, Service/Audience, Issuer,
+  60–900-second TTL, an absolute read-only RS256 private-key path, and a trusted
+  public JWKS containing the active key.
+
 ## Organizations
 
 All organization endpoints require a valid `hubcr_session` cookie.

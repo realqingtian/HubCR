@@ -4,7 +4,7 @@
 
 - Status: active living plan
 - Plan start: 2026-08-01
-- Current stage: Milestones 0 and 1 complete; M2-01 is next
+- Current stage: M2-01 through M2-04 are done; M2-05 is next
 - Requirements: [HubCR product requirements](requirements.md)
 
 This plan converts the product baseline into ordered, testable work. It is a delivery
@@ -54,11 +54,11 @@ product decisions, external reviews, or environment downloads.
 | Compose definition | PostgreSQL 17, Redis 7, MinIO and Distribution 3 configuration parses successfully | `docker compose ... config --quiet` |
 | Compose runtime | Full stack smoke passes on Apple Silicon; the Registry host port can be overridden when macOS reserves `5000` | [Compose smoke evidence](../deployments/compose/README.md#verified-environment) |
 | Application integration | API owns a PostgreSQL pool and dependency-aware readiness; worker and Redis connections remain pending | Unit, live dependency-loss/recovery, and graceful-shutdown checks |
-| Registry integration | Distribution has MinIO storage configuration but no HubCR token auth or event flow | Compose and Distribution configuration inspection |
+| Registry integration | Scoped token issuance and the token-protected local gateway are complete; event ingestion and artifact metadata remain pending | Go/PostgreSQL integration and Docker/OCI acceptance tests |
 
-The project is therefore at **Milestone 0**, not at a usable Registry MVP. The next
-work should establish decisions and integration foundations before product screens are
-built.
+The project has completed Milestones 0 and 1 plus M2-01 through M2-04. It is not yet a
+usable Registry MVP because digest-based metadata and event reconciliation are still
+missing; M2-05 is the next work package.
 
 ## 3. Decision gates
 
@@ -126,12 +126,16 @@ encoding open product policy.
 
 **M0-02 local infrastructure**
 
+These checks record the M0 exit configuration before M2 introduced mandatory token
+authentication; the current workflow and response are documented in the Compose
+guide.
+
 - Start from no project containers with
-  `docker compose --env-file .env -f deployments/compose/compose.yaml up -d`.
+  the then-current Compose workflow.
 - PostgreSQL becomes healthy; Redis answers `PING`; the MinIO bucket exists; Registry
-  `/v2/` returns the currently documented unauthenticated response.
+  `/v2/` returns the response documented for that M0 configuration.
 - A minimal image can be pushed to and pulled from the configured localhost Registry
-  port under the current unauthenticated development configuration.
+  port under that M0 unauthenticated development configuration.
 - Stop the stack without deleting named volumes; separately document the explicit,
   destructive command for removing local data.
 - Evidence: exact commands, container status, endpoint results, host architecture, and
@@ -266,10 +270,10 @@ and data-plane boundary.
 
 | ID | State | Result | Dependencies | Primary requirements |
 | --- | --- | --- | --- | --- |
-| M2-01 | `PLANNED` | Registry authentication protocol design covering challenge, service, audience, scope and TTL | M1, G-02 | FR-REG-001–002 |
-| M2-02 | `PLANNED` | Signing-key configuration and rotation-ready token signer/verifier boundary | M2-01 | FR-REG-002, NFR security |
-| M2-03 | `PLANNED` | `/token` endpoint parses requested scopes, authenticates callers and intersects requested actions with policy | M2-02, M1-06 | FR-REG-002–004 |
-| M2-04 | `PLANNED` | Distribution token-auth configuration and local gateway routing | M2-03 | FR-REG-001, FR-REG-005 |
+| M2-01 | `DONE` | [Registry authentication protocol design](registry-authentication.md) covering challenge, service, audience, scope and TTL | M1, G-02 | FR-REG-001–002 |
+| M2-02 | `DONE` | Signing-key configuration and rotation-ready token signer/verifier boundary | M2-01 | FR-REG-002, NFR security |
+| M2-03 | `DONE` | `/token` endpoint parses requested scopes, authenticates callers and intersects requested actions with policy | M2-02, M1-06 | FR-REG-002–004 |
+| M2-04 | `DONE` | Distribution token-auth configuration and local gateway routing | M2-03 | FR-REG-001, FR-REG-005 |
 | M2-05 | `PLANNED` | Artifact, manifest/index and tag persistence keyed by digest | M1-07 | FR-ART-001–005 |
 | M2-06 | `PLANNED` | Authenticated Distribution event receiver with idempotency and retry behavior | M2-05 | FR-ART-001, FR-ART-004 |
 | M2-07 | `PLANNED` | Repository artifact/tag list and detail APIs | M2-05, M2-06 | FR-ART-003, FR-ART-005 |
@@ -291,6 +295,26 @@ At minimum, automate:
 | Any | Pull-only token | `push` | Deny |
 | Any | Expired or invalid-signature token | Any | Deny |
 | Missing repository/policy data | Any | Any | Deny without leaking existence |
+
+M2-01 review evidence is the synchronized
+[Registry authentication protocol](registry-authentication.md). It fixes the
+challenge and gateway boundaries, Service/Audience and Issuer identifiers, repository
+scope grammar, action intersection, anonymous-public behavior, JWT claims, five-minute
+default TTL, asymmetric key rotation, failure semantics, and the implementation
+acceptance matrix. The design was approved on 2026-08-01.
+
+M2-02 through M2-04 evidence on 2026-08-01 includes standard-library RS256 signing,
+JWKS active/retiring-key verification, startup key/config validation, strict repeated
+repository-scope parsing, Basic credential authentication without web sessions,
+policy-intersected claims, secret-safe protocol errors/logs, and a same-origin local
+gateway in front of token-authenticated Distribution. Focused and full Go tests,
+`go vet ./...`, real PostgreSQL/GORM integration tests, and Compose configuration
+validation passed. `make test-m2-registry-e2e` then used Docker Engine `29.6.2` on an
+Apple Silicon `linux/arm64` server to prove owner push, anonymous public pull, private
+denial, reader pull without push, wrong-organization denial, invalid credentials, and
+cross-repository token isolation. Expiry, tampering, invalid audience, and key overlap
+are covered by verifier tests. M2-08 remains planned because its event dependency and
+full event-driven acceptance suite require M2-06.
 
 ### M2 exit criteria
 
@@ -367,12 +391,12 @@ operator workflow, and failure-recovery test. This milestone is not a single rel
 
 This is the recommended order from the current repository state:
 
-1. **Specify M2-01:** document the Registry challenge, service, audience, repository
-   scope grammar, action intersection, anonymous-public behavior and token TTL.
-2. **Implement M2-02/M2-03 after review:** add rotation-ready signing and the `/token`
-   decision boundary without using web sessions as Registry credentials.
-3. **Connect M2-04 only after token tests pass:** configure Distribution and the local
-   gateway, then prove exact repository/action isolation before metadata ingestion.
+1. **Implement M2-05:** add artifact, manifest/index, and mutable tag persistence keyed
+   by immutable digest, without treating roadmap data as already ingested.
+2. **Implement M2-06 after schema evidence:** add the authenticated, idempotent
+   Distribution event receiver and retry behavior.
+3. **Expose M2-07 only after reconciliation is proven:** add repository artifact/tag
+   APIs over the persisted digest model.
 
 Keep commits small enough that one work package and its tests can be reviewed together.
 

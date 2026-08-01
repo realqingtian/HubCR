@@ -5,7 +5,9 @@ import (
 	"fmt"
 	"net/url"
 	"os"
+	"path/filepath"
 	"strconv"
+	"strings"
 	"time"
 )
 
@@ -14,6 +16,7 @@ type API struct {
 	ShutdownTimeout time.Duration
 	Database        Database
 	Authentication  Authentication
+	Registry        Registry
 }
 
 type Database struct {
@@ -26,6 +29,18 @@ type Database struct {
 type Authentication struct {
 	SessionTTL          time.Duration
 	SessionCookieSecure bool
+}
+
+type Registry struct {
+	Enabled           bool
+	ExternalURL       string
+	AllowInsecureHTTP bool
+	Service           string
+	Issuer            string
+	TokenTTL          time.Duration
+	ClockSkew         time.Duration
+	PrivateKeyFile    string
+	PublicJWKSFile    string
 }
 
 type Worker struct {
@@ -45,13 +60,66 @@ func LoadAPI() (API, error) {
 	if err != nil {
 		return API{}, err
 	}
+	registry, err := loadRegistry()
+	if err != nil {
+		return API{}, err
+	}
 
 	return API{
 		Address:         stringValue("HUBCR_API_ADDRESS", ":8080"),
 		ShutdownTimeout: shutdownTimeout,
 		Database:        database,
 		Authentication:  authentication,
+		Registry:        registry,
 	}, nil
+}
+
+func loadRegistry() (Registry, error) {
+	enabled, err := boolean("HUBCR_REGISTRY_AUTH_ENABLED", false)
+	if err != nil {
+		return Registry{}, err
+	}
+	allowInsecureHTTP, err := boolean("HUBCR_REGISTRY_ALLOW_INSECURE_HTTP", false)
+	if err != nil {
+		return Registry{}, err
+	}
+	tokenTTL, err := duration("HUBCR_REGISTRY_TOKEN_TTL", 5*time.Minute)
+	if err != nil {
+		return Registry{}, err
+	}
+	if tokenTTL < time.Minute || tokenTTL > 15*time.Minute || tokenTTL%time.Second != 0 {
+		return Registry{}, errors.New("HUBCR_REGISTRY_TOKEN_TTL must be a whole-second duration from 1m through 15m")
+	}
+	registry := Registry{
+		Enabled:           enabled,
+		ExternalURL:       stringValue("HUBCR_REGISTRY_EXTERNAL_URL", ""),
+		AllowInsecureHTTP: allowInsecureHTTP,
+		Service:           stringValue("HUBCR_REGISTRY_SERVICE", "hubcr-registry"),
+		Issuer:            stringValue("HUBCR_REGISTRY_ISSUER", "hubcr-token-service"),
+		TokenTTL:          tokenTTL,
+		ClockSkew:         30 * time.Second,
+		PrivateKeyFile:    stringValue("HUBCR_REGISTRY_TOKEN_PRIVATE_KEY_FILE", ""),
+		PublicJWKSFile:    stringValue("HUBCR_REGISTRY_TOKEN_JWKS_FILE", ""),
+	}
+	if !validRegistryIdentifier(registry.Service) {
+		return Registry{}, errors.New("HUBCR_REGISTRY_SERVICE must be a valid protocol identifier")
+	}
+	if !validRegistryIdentifier(registry.Issuer) {
+		return Registry{}, errors.New("HUBCR_REGISTRY_ISSUER must be a valid protocol identifier")
+	}
+	if !enabled {
+		return registry, nil
+	}
+	if err := validateRegistryExternalURL(registry.ExternalURL, allowInsecureHTTP); err != nil {
+		return Registry{}, err
+	}
+	if registry.PrivateKeyFile == "" || !filepath.IsAbs(registry.PrivateKeyFile) {
+		return Registry{}, errors.New("HUBCR_REGISTRY_TOKEN_PRIVATE_KEY_FILE must be an absolute path when Registry authentication is enabled")
+	}
+	if registry.PublicJWKSFile == "" || !filepath.IsAbs(registry.PublicJWKSFile) {
+		return Registry{}, errors.New("HUBCR_REGISTRY_TOKEN_JWKS_FILE must be an absolute path when Registry authentication is enabled")
+	}
+	return registry, nil
 }
 
 func loadAuthentication() (Authentication, error) {
@@ -170,4 +238,40 @@ func validateDatabaseURL(value string) error {
 		return errors.New("HUBCR_DATABASE_URL must not include a fragment")
 	}
 	return nil
+}
+
+func validateRegistryExternalURL(value string, allowInsecureHTTP bool) error {
+	parsed, err := url.Parse(value)
+	if err != nil || parsed.Host == "" || parsed.User != nil ||
+		parsed.RawQuery != "" || parsed.Fragment != "" ||
+		(parsed.Path != "" && parsed.Path != "/") {
+		return errors.New("HUBCR_REGISTRY_EXTERNAL_URL must be an absolute origin without credentials, path, query, or fragment")
+	}
+	switch parsed.Scheme {
+	case "https":
+		return nil
+	case "http":
+		if allowInsecureHTTP {
+			return nil
+		}
+		return errors.New("HUBCR_REGISTRY_EXTERNAL_URL must use HTTPS unless insecure local HTTP is explicitly enabled")
+	default:
+		return errors.New("HUBCR_REGISTRY_EXTERNAL_URL must use the http or https scheme")
+	}
+}
+
+func validRegistryIdentifier(value string) bool {
+	if len(value) == 0 || len(value) > 128 {
+		return false
+	}
+	for index, character := range []byte(value) {
+		if character >= 'a' && character <= 'z' ||
+			character >= 'A' && character <= 'Z' ||
+			character >= '0' && character <= '9' ||
+			(index > 0 && strings.ContainsRune("._:-", rune(character))) {
+			continue
+		}
+		return false
+	}
+	return true
 }

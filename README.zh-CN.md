@@ -10,9 +10,9 @@ HubCR 是面向个人开发者与组织的容器镜像中心。它围绕 OCI Reg
 
 > [!IMPORTANT]
 > HubCR 目前处于早期开发阶段。仓库中已经包含可运行的控制面、本地 Session、组织和
-> Repository API、最小登录态 Web 工作区以及本地基础设施配置，但账号 Bootstrap/邀请
-> 兑换、Registry 集成、Registry Token 签发、Artifact 元数据和安全能力尚未实现。
-> 当前版本不能作为生产环境镜像仓库使用。
+> Repository API、最小登录态 Web 工作区、短期 Registry Token 签发，以及受 Token
+> 保护的本地 Distribution Gateway。账号 Bootstrap/邀请兑换、Artifact 元数据、事件
+> 协调和安全能力尚未实现。当前版本不能作为生产环境镜像仓库使用。
 
 ## HubCR 的用途
 
@@ -50,10 +50,10 @@ docker push hubcr.io/my-organization/backend:v1.0.0
 | Go 控制面 | 已有可运行服务、PostgreSQL 生命周期、依赖感知健康检查、本地 Session、组织、Repository 和集中授权 |
 | 异步 Worker | 已有可运行的轮询骨架，尚未连接任务持久化 |
 | Web 应用 | 已有最小登录态 Next.js 工作区，以及经过运行时校验的类型化认证、组织/成员和 Repository 流程 |
-| OCI 数据面 | 已定义由 MinIO 提供存储的本地 CNCF Distribution 配置 |
+| OCI 数据面 | 本地 Gateway 将 `/v2/` 路由到 MinIO 支持且受 Token 保护的 CNCF Distribution，并将 `/token` 路由到 Go 控制面 |
 | PostgreSQL 与 Redis | 已定义本地 Compose 服务；控制面已连接 PostgreSQL，Redis 尚未接入 |
 | 用户、组织与仓库 | 已有身份/Session API、个人 Namespace、组织/成员 API、集中能力 Policy、受 Policy 保护的 Repository API 及对应最小 Web 工作区；账号 Bootstrap/邀请兑换仍待实现 |
-| Registry Token 服务 | 已预留架构边界，令牌签发尚未实现 |
+| Registry Token 服务 | 已实现功能开关控制的 RS256 Token 签发、精确 Repository/Action Scope、JWKS 信任及支持轮换的验证 |
 | Trivy 与 Cosign | 已预留 Worker 边界，集成尚未实现 |
 
 ## 架构
@@ -163,11 +163,12 @@ cd ..
 ### 3. 启动本地基础设施
 
 ```bash
-docker compose --env-file .env -f deployments/compose/compose.yaml up -d
+make infra-up
 ```
 
-该命令会启动 PostgreSQL、Redis、MinIO 和 CNCF Distribution。端口及详细说明
-参见[本地基础设施文档](deployments/compose/README.zh-CN.md)。
+该命令会在需要时生成被忽略的本地 Registry 签名材料，然后启动 PostgreSQL、Redis、
+MinIO、CNCF Distribution 和本地 Gateway。端口及详细说明参见
+[本地基础设施文档](deployments/compose/README.zh-CN.md)。
 
 ### 4. 启动应用
 
@@ -191,7 +192,7 @@ make dev-web
 | --- | --- |
 | Web 应用 | `http://localhost:3000` |
 | Go 控制面 | `http://localhost:8080` |
-| OCI Distribution | `http://localhost:5000` |
+| OCI Gateway | `http://localhost:5000` |
 | MinIO API | `http://localhost:9000` |
 | MinIO 控制台 | `http://localhost:9001` |
 
@@ -214,7 +215,7 @@ PostgreSQL 不可用时，就绪检查返回 `503` 与 `{"status":"unavailable"}
 停止本地基础设施：
 
 ```bash
-docker compose --env-file .env -f deployments/compose/compose.yaml down
+make infra-down
 ```
 
 ## 开发命令
@@ -225,6 +226,7 @@ docker compose --env-file .env -f deployments/compose/compose.yaml down
 | `make dev-worker` | 运行异步 Worker |
 | `make dev-web` | 运行 Next.js 开发服务器 |
 | `make db-migrate` | 应用仅向前的 PostgreSQL 迁移 |
+| `make registry-dev-keys` | 生成或验证被忽略的本地 Registry RSA/JWKS 材料 |
 | `make infra-config` | 验证本地 Compose 配置 |
 | `make infra-up` | 启动本地基础设施且不改变命名卷 |
 | `make infra-down` | 停止本地基础设施且不删除命名卷 |
@@ -233,6 +235,7 @@ docker compose --env-file .env -f deployments/compose/compose.yaml down
 | `make test` | 运行 Go 与前端单元测试 |
 | `make test-integration` | 提供隔离 PostgreSQL 并运行后端集成测试 |
 | `make test-m1-e2e` | 通过真实 PostgreSQL、Go API、Next.js 与 Chromium 运行 M1 流程 1–3 |
+| `make test-m2-registry-e2e` | 运行隔离的真实 Docker Push/Pull 与 Registry 授权检查 |
 | `make check-docs` | 验证双语 Markdown 配对、链接、空白与文件末尾换行 |
 | `make check-secrets` | 扫描已跟踪文本中的高置信度凭据模式 |
 | `make check` | 运行格式检查、Vet、测试、类型检查、Lint 和生产构建 |
@@ -251,6 +254,14 @@ docker compose --env-file .env -f deployments/compose/compose.yaml down
 | `HUBCR_DATABASE_MAX_CONNECTIONS` | `10` | 控制面 PostgreSQL 连接池上限 |
 | `HUBCR_SESSION_TTL` | `24h` | 可撤销 Web Session 的有效期 |
 | `HUBCR_SESSION_COOKIE_SECURE` | `false` | 本地 HTTP Cookie 模式；所有 HTTPS 部署必须设为 `true` |
+| `HUBCR_REGISTRY_AUTH_ENABLED` | `false` | 启用 `/token`；`make dev-api` 会使用隔离的本地签名材料将其启用 |
+| `HUBCR_REGISTRY_EXTERNAL_URL` | 无 | 显式外部 Registry Origin；启用 Registry Auth 时必填 |
+| `HUBCR_REGISTRY_ALLOW_INSECURE_HTTP` | `false` | 仅为本地开发显式允许 HTTP Registry Origin |
+| `HUBCR_REGISTRY_SERVICE` | `hubcr-registry` | Distribution Challenge Service 与 JWT Audience |
+| `HUBCR_REGISTRY_ISSUER` | `hubcr-token-service` | 与 Distribution 共享的 JWT Issuer |
+| `HUBCR_REGISTRY_TOKEN_TTL` | `5m` | Registry 短期 Token TTL；允许范围为 `1m`–`15m` |
+| `HUBCR_REGISTRY_TOKEN_PRIVATE_KEY_FILE` | 无 | 活动 RSA 私钥的只读绝对路径 |
+| `HUBCR_REGISTRY_TOKEN_JWKS_FILE` | 无 | 包含活动公钥与可选退出公钥的可信公开 JWKS 绝对路径 |
 | `HUBCR_WORKER_POLL_INTERVAL` | `5s` | Worker 轮询间隔 |
 | `HUBCR_CONTROL_PLANE_URL` | `http://127.0.0.1:8080` | Next.js 同源 `/api` Rewrite 的服务端目标 |
 | `NEXT_PUBLIC_API_BASE_URL` | 同源 | 面向已启用 CORS 端点的可选浏览器公开覆盖项 |
@@ -259,7 +270,11 @@ docker compose --env-file .env -f deployments/compose/compose.yaml down
 | `POSTGRES_PASSWORD` | 仅供开发 | 本地 PostgreSQL 密码 |
 | `MINIO_ROOT_USER` | `hubcr` | 本地 MinIO 管理员 |
 | `MINIO_ROOT_PASSWORD` | 仅供开发 | 本地 MinIO 密码 |
-| `HUBCR_REGISTRY_PORT` | `5000` | OCI Distribution 发布到本机的端口 |
+| `HUBCR_REGISTRY_PORT` | `5000` | OCI Gateway 发布到本机的端口 |
+| `HUBCR_POSTGRES_PORT` | `5432` | 本地 PostgreSQL 宿主端口 |
+| `HUBCR_REDIS_PORT` | `6379` | 本地 Redis 宿主端口 |
+| `HUBCR_MINIO_PORT` | `9000` | 本地 MinIO API 宿主端口 |
+| `HUBCR_MINIO_CONSOLE_PORT` | `9001` | 本地 MinIO 控制台宿主端口 |
 
 ## 核心安全与数据规则
 
@@ -286,6 +301,7 @@ docker compose --env-file .env -f deployments/compose/compose.yaml down
 | 架构 | [Architecture](docs/architecture.md) | [架构](docs/architecture.zh-CN.md) |
 | 开发规范 | [Development](docs/development.md) | [开发规范](docs/development.zh-CN.md) |
 | 控制面 API 契约 | [API](docs/api.md) | [API](docs/api.zh-CN.md) |
+| Registry 认证协议 | [Registry auth](docs/registry-authentication.md) | [Registry 认证](docs/registry-authentication.zh-CN.md) |
 | AI 指令层级 | [Instructions](AGENTS.md) | [AI 指令](AGENTS.zh-CN.md) |
 | 本地基础设施 | [Compose](deployments/compose/README.md) | [本地基础设施](deployments/compose/README.zh-CN.md) |
 | Web 应用 | [Web](frontend/README.md) | [Web 应用](frontend/README.zh-CN.md) |

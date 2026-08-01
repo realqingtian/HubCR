@@ -101,6 +101,34 @@ func TestServiceAuthenticationFailuresAreUniform(t *testing.T) {
 	}
 }
 
+func TestAuthenticatePasswordDoesNotCreateWebSession(t *testing.T) {
+	now := time.Date(2026, 8, 1, 12, 0, 0, 0, time.UTC)
+	identity := Identity{
+		User: User{ID: "11111111-1111-4111-8111-111111111111", Username: "owner"},
+		Credential: LocalCredential{
+			UserID: "11111111-1111-4111-8111-111111111111", PasswordHash: "stored-hash",
+		},
+	}
+	store := &serviceTestStore{identity: identity}
+	service, err := NewService(store, serviceTestPasswords{}, ServiceOptions{
+		SessionTTL: time.Hour,
+		Random:     bytes.NewReader(bytes.Repeat([]byte{1}, sessionSecretBytes)),
+		Clock:      func() time.Time { return now },
+		Limiter:    AllowAllLoginLimiter{},
+	})
+	if err != nil {
+		t.Fatalf("NewService() error = %v", err)
+	}
+
+	user, err := service.AuthenticatePassword(context.Background(), "owner", []byte("correct"))
+	if err != nil || user != identity.User {
+		t.Fatalf("AuthenticatePassword() = %#v, %v", user, err)
+	}
+	if store.session.ID != "" || store.session.TokenDigest != (SecretDigest{}) {
+		t.Fatalf("AuthenticatePassword() created web session %#v", store.session)
+	}
+}
+
 func TestServiceRejectsExpiredOrRevokedSession(t *testing.T) {
 	now := time.Date(2026, 8, 1, 12, 0, 0, 0, time.UTC)
 	revokedAt := now.Add(-time.Minute)

@@ -4,7 +4,7 @@
 
 - 状态：持续维护中的有效计划
 - 计划开始：2026-08-01
-- 当前阶段：里程碑 0 与里程碑 1 已完成；下一项为 M2-01
+- 当前阶段：M2-01 至 M2-04 已完成；下一项为 M2-05
 - 需求基线：[HubCR 产品需求](requirements.zh-CN.md)
 
 本计划将产品基线转化为有顺序、可测试的工作项。它是一份交付管理文档：完成工作后
@@ -46,10 +46,10 @@
 | Compose 定义 | PostgreSQL 17、Redis 7、MinIO、Distribution 3 配置可成功解析 | `docker compose ... config --quiet` |
 | Compose 运行 | 完整 Stack 已在 Apple Silicon 通过冒烟测试；macOS 占用 `5000` 时可覆盖 Registry 宿主端口 | [Compose 冒烟证据](../deployments/compose/README.zh-CN.md#已验证环境) |
 | 应用集成 | API 已持有 PostgreSQL 连接池并提供依赖感知就绪检查；Worker 与 Redis 连接仍待实现 | 单元测试、实时依赖中断/恢复及优雅退出检查 |
-| Registry 集成 | Distribution 已配置 MinIO 存储，但没有 HubCR Token 认证和事件流 | Compose 与 Distribution 配置检查 |
+| Registry 集成 | Scoped Token 签发与受 Token 保护的本地 Gateway 已完成；事件接入和 Artifact 元数据仍待实现 | Go/PostgreSQL 集成测试与 Docker/OCI 验收测试 |
 
-因此项目目前处于 **里程碑 0**，还不是可用的 Registry MVP。下一步应先确定关键决策
-并建立集成基础，而不是先制作产品页面。
+项目已完成里程碑 0、里程碑 1 以及 M2-01 至 M2-04。由于基于 Digest 的元数据与事件
+协调仍缺失，目前还不是可用的 Registry MVP；下一工作包为 M2-05。
 
 ## 3. 决策门
 
@@ -113,11 +113,14 @@ G-01 与 G-02 关闭后已重新估算 M1。管理员邀请、本地密码凭据
 
 **M0-02 本地基础设施**
 
+这些检查记录的是 M2 引入强制 Token 认证前的 M0 退出配置；当前工作流与响应以 Compose
+指南为准。
+
 - 在没有项目容器的状态下执行
-  `docker compose --env-file .env -f deployments/compose/compose.yaml up -d`。
+  当时的 Compose 工作流。
 - PostgreSQL 进入 Healthy；Redis 响应 `PING`；MinIO Bucket 存在；Registry `/v2/`
-  返回当前文档所描述的未认证响应。
-- 在当前未认证开发配置下，可向配置的本地 Registry 端口 Push 并 Pull 一个最小镜像。
+  返回 M0 配置文档当时描述的响应。
+- 在该 M0 未认证开发配置下，可向配置的本地 Registry 端口 Push 并 Pull 一个最小镜像。
 - 停止 Stack 时不删除命名卷；另行记录会移除本地数据的显式破坏性命令。
 - 在 Compose 指南中记录准确命令、容器状态、端点结果、宿主架构和 Apple Silicon 限制。
 
@@ -232,10 +235,10 @@ Bootstrap 入口呈现；管理员邀请 API 不属于这三个 M1 退出流程�
 
 | ID | 状态 | 交付结果 | 依赖 | 主要需求 |
 | --- | --- | --- | --- | --- |
-| M2-01 | `PLANNED` | Registry 认证协议设计，覆盖 Challenge、Service、Audience、Scope 和 TTL | M1、G-02 | FR-REG-001–002 |
-| M2-02 | `PLANNED` | 签名密钥配置及支持轮换的 Token 签名/验证边界 | M2-01 | FR-REG-002、非功能安全需求 |
-| M2-03 | `PLANNED` | `/token` 解析 Scope、认证调用者，并取请求操作与策略允许操作的交集 | M2-02、M1-06 | FR-REG-002–004 |
-| M2-04 | `PLANNED` | Distribution Token 认证配置与本地网关路由 | M2-03 | FR-REG-001、FR-REG-005 |
+| M2-01 | `DONE` | [Registry 认证协议设计](registry-authentication.zh-CN.md)，覆盖 Challenge、Service、Audience、Scope 和 TTL | M1、G-02 | FR-REG-001–002 |
+| M2-02 | `DONE` | 签名密钥配置及支持轮换的 Token 签名/验证边界 | M2-01 | FR-REG-002、非功能安全需求 |
+| M2-03 | `DONE` | `/token` 解析 Scope、认证调用者，并取请求操作与策略允许操作的交集 | M2-02、M1-06 | FR-REG-002–004 |
+| M2-04 | `DONE` | Distribution Token 认证配置与本地网关路由 | M2-03 | FR-REG-001、FR-REG-005 |
 | M2-05 | `PLANNED` | 以 Digest 为键的 Artifact、Manifest/Index 和 Tag 持久化 | M1-07 | FR-ART-001–005 |
 | M2-06 | `PLANNED` | 有认证且支持幂等与重试的 Distribution 事件接收器 | M2-05 | FR-ART-001、FR-ART-004 |
 | M2-07 | `PLANNED` | 仓库 Artifact/Tag 列表与详情 API | M2-05、M2-06 | FR-ART-003、FR-ART-005 |
@@ -257,6 +260,22 @@ Bootstrap 入口呈现；管理员邀请 API 不属于这三个 M1 退出流程�
 | 任意 | 仅 Pull Token | `push` | 拒绝 |
 | 任意 | 过期或签名无效的 Token | 任意 | 拒绝 |
 | 仓库/策略数据缺失 | 任意 | 任意 | 拒绝且不泄露资源是否存在 |
+
+M2-01 的评审证据是同步的
+[Registry 认证协议](registry-authentication.zh-CN.md)。它确定 Challenge 与 Gateway
+边界、Service/Audience 与 Issuer 标识、Repository Scope 语法、Action 交集、匿名公开
+行为、JWT Claim、默认五分钟 TTL、非对称密钥轮换、失败语义和实现验收矩阵。该设计已
+于 2026-08-01 获批。
+
+M2-02 至 M2-04 在 2026-08-01 的证据包括：标准库 RS256 签名、JWKS 活动/退出密钥
+验证、启动密钥与配置校验、严格解析重复 Repository Scope、无需 Web Session 的 Basic
+凭据认证、策略交集 Claim、不泄露秘密的协议错误与日志，以及位于 Token Auth
+Distribution 前的同源本地 Gateway。目标与完整 Go 测试、`go vet ./...`、真实
+PostgreSQL/GORM 集成测试及 Compose 配置校验均通过。随后
+`make test-m2-registry-e2e` 在 Apple Silicon `linux/arm64` Server 的 Docker Engine
+`29.6.2` 上证明 Owner Push、匿名公开 Pull、私有拒绝、Reader 只能 Pull、错误组织拒绝、
+错误凭据及跨 Repository Token 隔离。过期、篡改、错误 Audience 与密钥重叠由 Verifier
+测试覆盖。M2-08 仍为计划状态，因为其事件依赖和完整事件驱动验收套件需要 M2-06。
 
 ### M2 退出标准
 
@@ -324,12 +343,12 @@ Bootstrap 入口呈现；管理员邀请 API 不属于这三个 M1 退出流程�
 
 根据当前仓库状态，推荐按以下顺序执行：
 
-1. **定义 M2-01：**记录 Registry Challenge、Service、Audience、Repository Scope
-   语法、Action 交集、匿名公开行为和 Token TTL。
-2. **评审后实现 M2-02/M2-03：**增加支持轮换的签名和 `/token` 决策边界，且不得把
-   Web Session 当作 Registry 凭据。
-3. **Token 测试通过后再连接 M2-04：**配置 Distribution 与本地 Gateway，并在接入
-   元数据前证明 Repository/Action 精确隔离。
+1. **实现 M2-05：**增加以不可变 Digest 为键的 Artifact、Manifest/Index 与可变 Tag
+   持久化，不得把路线图数据描述为已经接入。
+2. **Schema 证据通过后实现 M2-06：**增加经过认证、幂等且支持重试的 Distribution
+   事件接收器。
+3. **协调正确性得到证明后再暴露 M2-07：**基于持久化 Digest 模型增加 Repository
+   Artifact/Tag API。
 
 Commit 应保持足够小，使一个工作包及其测试可一起审查。
 
