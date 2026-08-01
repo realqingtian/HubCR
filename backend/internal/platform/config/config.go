@@ -41,6 +41,7 @@ type Registry struct {
 	ClockSkew         time.Duration
 	PrivateKeyFile    string
 	PublicJWKSFile    string
+	EventToken        string
 }
 
 type Worker struct {
@@ -100,6 +101,7 @@ func loadRegistry() (Registry, error) {
 		ClockSkew:         30 * time.Second,
 		PrivateKeyFile:    stringValue("HUBCR_REGISTRY_TOKEN_PRIVATE_KEY_FILE", ""),
 		PublicJWKSFile:    stringValue("HUBCR_REGISTRY_TOKEN_JWKS_FILE", ""),
+		EventToken:        stringValue("HUBCR_REGISTRY_EVENT_TOKEN", ""),
 	}
 	if !validRegistryIdentifier(registry.Service) {
 		return Registry{}, errors.New("HUBCR_REGISTRY_SERVICE must be a valid protocol identifier")
@@ -118,6 +120,9 @@ func loadRegistry() (Registry, error) {
 	}
 	if registry.PublicJWKSFile == "" || !filepath.IsAbs(registry.PublicJWKSFile) {
 		return Registry{}, errors.New("HUBCR_REGISTRY_TOKEN_JWKS_FILE must be an absolute path when Registry authentication is enabled")
+	}
+	if !validRegistryEventToken(registry.EventToken) {
+		return Registry{}, errors.New("HUBCR_REGISTRY_EVENT_TOKEN must be 32 through 512 visible ASCII characters when Registry authentication is enabled")
 	}
 	return registry, nil
 }
@@ -272,6 +277,18 @@ func validRegistryIdentifier(value string) bool {
 			continue
 		}
 		return false
+	}
+	return true
+}
+
+func validRegistryEventToken(value string) bool {
+	if len(value) < 32 || len(value) > 512 {
+		return false
+	}
+	for _, character := range []byte(value) {
+		if character < 0x21 || character > 0x7e {
+			return false
+		}
 	}
 	return true
 }

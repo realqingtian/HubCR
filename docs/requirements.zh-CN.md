@@ -78,12 +78,12 @@ hubcr.io/{namespace}/{repository}:{tag}
 
 | 区域 | 当前已实现 | 尚未实现 |
 | --- | --- | --- |
-| Go API | 进程装配、PostgreSQL 生命周期、健康检查、本地 Session、组织/成员及受 Policy 保护的 Repository API | 账号 Bootstrap/邀请兑换、Registry Token 和 Artifact/Tag 元数据 API |
+| Go API | 进程装配、PostgreSQL 生命周期、健康检查、本地 Session、组织/成员、受 Policy 保护的 Repository 与 Artifact/Tag API、Registry Token 签发及经过认证的 Distribution Push 事件接入 | 账号 Bootstrap/邀请兑换 |
 | Go Worker | 可配置轮询循环与优雅退出 | PostgreSQL 任务领取与安全任务 |
 | Web | 最小登录态工作区，以及经运行时校验的认证、组织/成员和 Repository 客户端与流程 | 账号 Bootstrap/邀请兑换、公开发现、Artifact/Tag 和 Registry 工作流 |
-| OCI 数据面 | 使用 MinIO 的 Distribution Compose 定义 | Token 认证、事件集成和授权 Push/Pull 端到端流程 |
-| 基础设施 | PostgreSQL、Redis、MinIO、Distribution 的 Compose 定义；控制面 PostgreSQL 连接及覆盖到 Repository 的带版本 GORM 迁移 | Worker/Redis 连接、Artifact/任务 Schema 迁移和生产部署 |
-| 质量保障 | Go 与 Web 单元检查、隔离 PostgreSQL 持久化/HTTP/跨租户测试、稳定 Playwright 状态测试、真实 M1 全栈浏览器流程及仓库级 `make check` | OCI 客户端及后续元数据/安全端到端套件 |
+| OCI 数据面 | 已有 MinIO 支持且受 Token 保护的本地 Distribution Gateway，并通过授权 Docker/OCI 检查及向控制面投递 Push 事件 | Delete 事件协调与获批的生命周期行为 |
+| 基础设施 | PostgreSQL、Redis、MinIO、Distribution 的 Compose 定义；控制面 PostgreSQL 连接及覆盖到 Artifact/Tag 元数据的带版本 GORM 迁移 | Worker/Redis 连接、任务 Schema 迁移和生产部署 |
+| 质量保障 | Go 与 Web 单元检查、隔离 PostgreSQL 持久化/HTTP/跨租户测试、稳定 Playwright 状态测试、真实 M1 全栈浏览器流程、完整 M2 Docker/OCI 授权矩阵、事件驱动元数据及 Artifact API 检查和仓库级 `make check` | M2 运维遥测及后续安全端到端套件 |
 
 在第 9 节 MVP 退出标准全部通过前，当前脚手架既不能用于生产，也不能被描述成已可用
 的多用户 Registry。
@@ -183,9 +183,9 @@ Web 会话与 Registry Token 是两种独立凭据。实现 FR-REG-002 前必须
 ## 6. 领域与数据约束
 
 当前持久化模型已包含 `User`、本地凭据、可撤销 Web Session、管理员邀请、
-`Organization`、`OrganizationMember`、`Namespace` 和 `Repository` 记录。后续 MVP
-工作再增加 `Artifact` 和 `Tag`。安全与运维里程碑随后添加任务、扫描、SBOM、签名、
-信任策略、Robot、Token 和审计记录。
+`Organization`、`OrganizationMember`、`Namespace`、`Repository`、`Artifact`、当前
+`Tag` 和有序 Manifest Descriptor 记录。安全与运维里程碑随后添加任务、扫描、SBOM、
+签名、信任策略、Robot、Token 和审计记录。
 
 强制数据约束包括：
 

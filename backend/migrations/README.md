@@ -33,6 +33,9 @@ that plain `AutoMigrate` does not provide, while CI exercises the same code as t
   `000005_repositories` adds namespace-owned repository identities, explicit
   `PUBLIC`/`PRIVATE` visibility without a database default, creator and initial
   visibility-change evidence, and namespace/name uniqueness.
+  `000006_artifact_metadata` adds repository-scoped immutable Artifact Digests,
+  current Tag references, ordered Manifest descriptors, and cross-repository
+  composite foreign-key protection.
 
 Run migrations against the configured database from the repository root:
 
@@ -46,7 +49,8 @@ logs must never expose the credential-bearing URL.
 
 ## Integration test isolation
 
-Run the migration, PostgreSQL connectivity, and auth-store lifecycle checks with:
+Run the migration, PostgreSQL connectivity, persistence lifecycle, constraint, and
+concurrency checks with:
 
 ```bash
 make test-integration

@@ -11,8 +11,10 @@ registry_port=${HUBCR_M2_E2E_REGISTRY_PORT:-55001}
 api_port=${HUBCR_M2_E2E_API_PORT:-18081}
 database_url="postgres://hubcr:hubcr-dev-only@127.0.0.1:$postgres_port/hubcr?sslmode=disable"
 registry_origin="http://localhost:$registry_port"
+api_origin="http://127.0.0.1:$api_port"
 registry_auth_dir=$(pwd)/.data/registry-auth
 test_password=m2-e2e-password
+event_token=hubcr-registry-event-dev-only-000000000000
 owner_username=m2-e2e-owner
 reader_username=m2-e2e-reader
 outsider_username=m2-e2e-outsider
@@ -23,6 +25,8 @@ reader_image="localhost:$registry_port/m2-e2e-team/private-image:reader-denied"
 log_directory=$(mktemp -d)
 docker_config=$(mktemp -d)
 api_pid=
+owner_cookie="$log_directory/owner.cookies"
+outsider_cookie="$log_directory/outsider.cookies"
 
 # An existing empty config disables Docker CLI's macOS default credential-helper
 # discovery, so this test never reads from or writes to the user's Keychain.
@@ -53,6 +57,7 @@ compose() {
     HUBCR_REGISTRY_PORT="$registry_port" \
     HUBCR_API_PORT="$api_port" \
     HUBCR_REGISTRY_AUTH_DIR="$registry_auth_dir" \
+    HUBCR_REGISTRY_EVENT_TOKEN="$event_token" \
     docker compose --project-name "$test_project" --env-file .env.example \
         --file deployments/compose/compose.yaml "$@"
 }
@@ -91,6 +96,15 @@ fail() {
     exit 1
 }
 
+web_login() {
+    username=$1
+    cookie_file=$2
+    printf '{"username":"%s","password":"%s"}\n' "$username" "$test_password" |
+        curl --fail --silent --show-error --output /dev/null \
+            --cookie-jar "$cookie_file" --header 'Content-Type: application/json' \
+            --data-binary @- "$api_origin/api/v1/auth/login"
+}
+
 trap cleanup EXIT
 trap 'exit 130' INT
 trap 'exit 143' TERM
@@ -111,10 +125,11 @@ HUBCR_REGISTRY_ISSUER=hubcr-token-service \
 HUBCR_REGISTRY_TOKEN_TTL=5m \
 HUBCR_REGISTRY_TOKEN_PRIVATE_KEY_FILE="$registry_auth_dir/private.pem" \
 HUBCR_REGISTRY_TOKEN_JWKS_FILE="$registry_auth_dir/jwks.json" \
+HUBCR_REGISTRY_EVENT_TOKEN="$event_token" \
     go -C backend run ./cmd/api >"$log_directory/api.log" 2>&1 &
 api_pid=$!
 
-if ! wait_for_ready "http://127.0.0.1:$api_port/api/v1/health/ready" 200; then
+if ! wait_for_ready "$api_origin/api/v1/health/ready" 200; then
     fail "control plane did not become ready"
 fi
 if ! wait_for_ready "$registry_origin/v2/" 401; then
@@ -145,6 +160,10 @@ docker_cli tag "$base_image" "$public_image"
 docker_cli tag "$base_image" "$private_image"
 docker_cli push "$public_image" >/dev/null
 docker_cli push "$private_image" >/dev/null
+if ! HUBCR_DATABASE_URL="$database_url" go -C backend run ./internal/testsupport/m2assert; then
+    compose logs registry >&2
+    fail "Distribution notifications did not reconcile Artifact metadata"
+fi
 clear_docker_credentials
 docker_cli image rm "$public_image" "$private_image" >/dev/null
 
@@ -160,6 +179,9 @@ if docker_cli push "$reader_image" >"$log_directory/reader-push.log" 2>&1; then
     fail "READER push unexpectedly succeeded"
 fi
 clear_docker_credentials
+if ! HUBCR_DATABASE_URL="$database_url" go -C backend run ./internal/testsupport/m2assert; then
+    fail "denied push changed Artifact metadata"
+fi
 
 set_docker_credentials "$outsider_username" "$test_password"
 if docker_cli pull "$private_image" >"$log_directory/outsider-pull.log" 2>&1; then
@@ -198,9 +220,73 @@ cross_status=$(
 if [ "$cross_status" != "401" ]; then
     fail "cross-repository token reuse returned HTTP $cross_status instead of 401"
 fi
+pull_only_push_status=$(
+    printf 'header = "Authorization: Bearer %s"\nrequest = "POST"\n' "$token" |
+        curl --silent --output "$log_directory/pull-only-push.log" \
+            --write-out '%{http_code}' --config - \
+            "$registry_origin/v2/m2-e2e-team/private-image/blobs/uploads/"
+)
+if [ "$pull_only_push_status" != "401" ]; then
+    fail "pull-only token used for push returned HTTP $pull_only_push_status instead of 401"
+fi
+
+expired_token=$(go -C backend run ./internal/testsupport/m2token "$registry_auth_dir/private.pem")
+expired_status=$(
+    printf 'header = "Authorization: Bearer %s"\n' "$expired_token" |
+        curl --silent --output "$log_directory/expired-token.log" \
+            --write-out '%{http_code}' --config - \
+            "$registry_origin/v2/m2-e2e-team/private-image/tags/list"
+)
+if [ "$expired_status" != "401" ]; then
+    fail "expired token returned HTTP $expired_status instead of 401"
+fi
+
+case "$token" in
+    *A) tampered_token="${token%?}B" ;;
+    *) tampered_token="${token%?}A" ;;
+esac
+tampered_status=$(
+    printf 'header = "Authorization: Bearer %s"\n' "$tampered_token" |
+        curl --silent --output "$log_directory/tampered-token.log" \
+            --write-out '%{http_code}' --config - \
+            "$registry_origin/v2/m2-e2e-team/private-image/tags/list"
+)
+if [ "$tampered_status" != "401" ]; then
+    fail "invalid-signature token returned HTTP $tampered_status instead of 401"
+fi
+
+web_login "$owner_username" "$owner_cookie"
+owner_tag_detail=$(
+    curl --fail --silent --show-error --cookie "$owner_cookie" \
+        "$api_origin/api/v1/namespaces/m2-e2e-team/repositories/private-image/tags/smoke"
+)
+case "$owner_tag_detail" in
+    *'"name":"smoke"'*'"digest":"sha256:'*'"media_type":'*'"size_bytes":'*) ;;
+    *) fail "owner Artifact/Tag detail omitted reconciled metadata" ;;
+esac
+web_login "$outsider_username" "$outsider_cookie"
+outsider_private_status=$(
+    curl --silent --output "$log_directory/outsider-artifacts.log" --write-out '%{http_code}' \
+        --cookie "$outsider_cookie" \
+        "$api_origin/api/v1/namespaces/m2-e2e-team/repositories/private-image/artifacts"
+)
+if [ "$outsider_private_status" != "404" ]; then
+    fail "private Artifact API returned HTTP $outsider_private_status to an outsider instead of 404"
+fi
+outsider_public_status=$(
+    curl --silent --output "$log_directory/public-artifacts.json" --write-out '%{http_code}' \
+        --cookie "$outsider_cookie" \
+        "$api_origin/api/v1/namespaces/m2-e2e-team/repositories/public-image/artifacts"
+)
+if [ "$outsider_public_status" != "200" ] ||
+    ! grep -Fq '"digest":"sha256:' "$log_directory/public-artifacts.json"; then
+    fail "public Artifact API did not expose reconciled metadata to an authenticated outsider"
+fi
 if grep -Fq "$test_password" "$log_directory/api.log" ||
-    grep -Fq "$token" "$log_directory/api.log"; then
+    grep -Fq "$token" "$log_directory/api.log" ||
+    grep -Fq "$expired_token" "$log_directory/api.log" ||
+    grep -Fq "$tampered_token" "$log_directory/api.log"; then
     fail "control-plane logs leaked Registry credentials or tokens"
 fi
 
-echo "M2 Registry end-to-end checks passed"
+echo "M2 Registry security matrix, event reconciliation, and Artifact API checks passed"

@@ -23,6 +23,7 @@ func TestLoadAPIDefaults(t *testing.T) {
 	t.Setenv("HUBCR_REGISTRY_TOKEN_TTL", "")
 	t.Setenv("HUBCR_REGISTRY_TOKEN_PRIVATE_KEY_FILE", "")
 	t.Setenv("HUBCR_REGISTRY_TOKEN_JWKS_FILE", "")
+	t.Setenv("HUBCR_REGISTRY_EVENT_TOKEN", "")
 
 	cfg, err := LoadAPI()
 	if err != nil {
@@ -75,6 +76,7 @@ func TestLoadAPIRegistryAuthenticationConfiguration(t *testing.T) {
 	t.Setenv("HUBCR_REGISTRY_TOKEN_TTL", "10m")
 	t.Setenv("HUBCR_REGISTRY_TOKEN_PRIVATE_KEY_FILE", "/run/secrets/hubcr-registry-key.pem")
 	t.Setenv("HUBCR_REGISTRY_TOKEN_JWKS_FILE", "/run/secrets/hubcr-registry-jwks.json")
+	t.Setenv("HUBCR_REGISTRY_EVENT_TOKEN", "0123456789abcdef0123456789abcdef")
 
 	cfg, err := LoadAPI()
 	if err != nil {
@@ -87,7 +89,8 @@ func TestLoadAPIRegistryAuthenticationConfiguration(t *testing.T) {
 		cfg.Registry.Issuer != "auth.registry.example" ||
 		cfg.Registry.TokenTTL != 10*time.Minute ||
 		cfg.Registry.PrivateKeyFile != "/run/secrets/hubcr-registry-key.pem" ||
-		cfg.Registry.PublicJWKSFile != "/run/secrets/hubcr-registry-jwks.json" {
+		cfg.Registry.PublicJWKSFile != "/run/secrets/hubcr-registry-jwks.json" ||
+		cfg.Registry.EventToken != "0123456789abcdef0123456789abcdef" {
 		t.Fatalf("Registry = %#v", cfg.Registry)
 	}
 }
@@ -154,6 +157,7 @@ func TestLoadAPIRejectsInvalidRegistryConfiguration(t *testing.T) {
 	}
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
+			t.Setenv("HUBCR_REGISTRY_EVENT_TOKEN", "0123456789abcdef0123456789abcdef")
 			for key, value := range test.env {
 				t.Setenv(key, value)
 			}
@@ -162,6 +166,16 @@ func TestLoadAPIRejectsInvalidRegistryConfiguration(t *testing.T) {
 			}
 		})
 	}
+	t.Run("short event token", func(t *testing.T) {
+		t.Setenv("HUBCR_REGISTRY_AUTH_ENABLED", "true")
+		t.Setenv("HUBCR_REGISTRY_EXTERNAL_URL", "https://registry.example")
+		t.Setenv("HUBCR_REGISTRY_TOKEN_PRIVATE_KEY_FILE", "/tmp/key.pem")
+		t.Setenv("HUBCR_REGISTRY_TOKEN_JWKS_FILE", "/tmp/jwks.json")
+		t.Setenv("HUBCR_REGISTRY_EVENT_TOKEN", "short")
+		if _, err := LoadAPI(); err == nil {
+			t.Fatal("LoadAPI() error = nil")
+		}
+	})
 }
 
 func TestLoadAPIAllowsExplicitLocalRegistryHTTP(t *testing.T) {
@@ -170,6 +184,7 @@ func TestLoadAPIAllowsExplicitLocalRegistryHTTP(t *testing.T) {
 	t.Setenv("HUBCR_REGISTRY_EXTERNAL_URL", "http://localhost:5000")
 	t.Setenv("HUBCR_REGISTRY_TOKEN_PRIVATE_KEY_FILE", "/tmp/key.pem")
 	t.Setenv("HUBCR_REGISTRY_TOKEN_JWKS_FILE", "/tmp/jwks.json")
+	t.Setenv("HUBCR_REGISTRY_EVENT_TOKEN", "0123456789abcdef0123456789abcdef")
 	if _, err := LoadAPI(); err != nil {
 		t.Fatalf("LoadAPI() error = %v", err)
 	}

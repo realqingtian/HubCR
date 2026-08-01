@@ -62,6 +62,7 @@ func TestControlPlaneComposesEnabledRegistryTokenService(t *testing.T) {
 			Service: "hubcr-registry", Issuer: "hubcr-token-service",
 			TokenTTL: 5 * time.Minute, ClockSkew: 30 * time.Second,
 			PrivateKeyFile: keyPath, PublicJWKSFile: jwksPath,
+			EventToken: "0123456789abcdef0123456789abcdef",
 		},
 	}, slog.New(slog.NewJSONHandler(io.Discard, nil)))
 	if err != nil {

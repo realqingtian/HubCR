@@ -30,6 +30,8 @@ HUBCR_ENV_FILE=.env.example make infra-down
 请求 Token 前，应在另一终端启动 `make dev-api`。它会启用仅供本地 HTTP 使用的 Token
 Endpoint，并复用同一份被忽略的签名材料。直接启动 API 时，除非完整提供 Registry
 Auth 配置，否则保持 Fail Closed。
+API 与 Distribution 通知 Endpoint 还必须获得相同的 `HUBCR_REGISTRY_EVENT_TOKEN`；
+文档中的 Make 工作流会提供 `.env.example` 里明确标记为仅供开发的默认值。
 
 覆盖 Registry 端口时，应向 `infra-up`、`dev-api` 与 `infra-smoke` 传入相同值，例如
 `HUBCR_REGISTRY_PORT=5001`。
@@ -45,8 +47,9 @@ Auth 配置，否则保持 Fail Closed。
 
 覆盖端口后，请使用配置的 `HUBCR_REGISTRY_PORT` 代替 `5000`。
 
-本地 Make 工作流已启用 Registry Token 认证。Distribution 事件通知与 Artifact
-元数据协调尚未实现。在删除策略获批前，Distribution 删除能力保持禁用。
+本地 Make 工作流已启用 Registry Token 认证及经过认证的 Distribution Push 事件投递。
+Manifest 与 Index 事件会在 PostgreSQL 中协调 Artifact 与当前 Tag 元数据。Pull、Delete
+和 Mount 事件会被过滤；生命周期策略获批前，Distribution 删除能力保持禁用。
 
 ## 冒烟检查
 
@@ -70,7 +73,10 @@ make test-m2-registry-e2e
 ```
 
 它验证 Owner Push、匿名公开 Pull、私有拒绝、Reader 只能 Pull、错误组织拒绝、错误
-凭据及跨 Repository Token 隔离。测试使用专用端口与独立 Compose Project，永不读写
+凭据、跨 Repository 与跨 Action Token 隔离、运行时拒绝过期及签名无效 Token、事件
+生成的 Artifact/Tag 元数据及经过授权的 Artifact API 读取。元数据断言覆盖 Repository
+级身份、Manifest/Index Descriptor、Tag 状态、被拒绝 Push 不产生持久化、Private `404`
+不泄露及经过认证的 Public 访问。测试使用专用端口与独立 Compose Project，永不读写
 用户 Docker Credential Store 或 macOS Keychain。
 
 ## 停止与本地数据
@@ -92,9 +98,9 @@ docker compose --env-file .env.example -f deployments/compose/compose.yaml down 
 
 认证 Registry 链路已于 2026-08-01 在 Apple Silicon 上验证，环境为 Docker Engine
 `29.6.2`、Docker Compose `v5.3.1`、`linux/arm64` Docker Server、PostgreSQL 17、
-Registry 3 与 Nginx 1.29。自动化矩阵使用隔离宿主端口 `55001` 与 `alpine:3.22`，全部
-授权检查通过。Token 过期与无效签名行为由 Go Verifier 测试覆盖；完整的 M2-08
-事件驱动 OCI 套件仍需等待 M2-06。
+Registry 3 与 Nginx 1.29。自动化矩阵使用隔离宿主端口 `55001` 与 `alpine:3.22`；授权、
+跨 Repository 与跨 Action Scope 隔离、运行时 Token 过期与签名拒绝、事件驱动
+Artifact/Tag 及 Artifact API 检查均通过。
 
 macOS 上的 `ControlCenter` 可能占用 `5000` 端口；应为 `infra-up`、`dev-api` 与
 `infra-smoke` 统一传入其他 `HUBCR_REGISTRY_PORT`。这属于宿主端口冲突，不是 OCI

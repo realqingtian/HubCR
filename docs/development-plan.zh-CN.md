@@ -4,7 +4,7 @@
 
 - 状态：持续维护中的有效计划
 - 计划开始：2026-08-01
-- 当前阶段：M2-01 至 M2-04 已完成；下一项为 M2-05
+- 当前阶段：M2-01 至 M2-08 已完成；下一项为 M2-09
 - 需求基线：[HubCR 产品需求](requirements.zh-CN.md)
 
 本计划将产品基线转化为有顺序、可测试的工作项。它是一份交付管理文档：完成工作后
@@ -46,10 +46,9 @@
 | Compose 定义 | PostgreSQL 17、Redis 7、MinIO、Distribution 3 配置可成功解析 | `docker compose ... config --quiet` |
 | Compose 运行 | 完整 Stack 已在 Apple Silicon 通过冒烟测试；macOS 占用 `5000` 时可覆盖 Registry 宿主端口 | [Compose 冒烟证据](../deployments/compose/README.zh-CN.md#已验证环境) |
 | 应用集成 | API 已持有 PostgreSQL 连接池并提供依赖感知就绪检查；Worker 与 Redis 连接仍待实现 | 单元测试、实时依赖中断/恢复及优雅退出检查 |
-| Registry 集成 | Scoped Token 签发与受 Token 保护的本地 Gateway 已完成；事件接入和 Artifact 元数据仍待实现 | Go/PostgreSQL 集成测试与 Docker/OCI 验收测试 |
+| Registry 集成 | Scoped Token 签发、受 Token 保护的本地 Gateway、Push 事件协调及经过授权的 Artifact/Tag 读取 API 已完成 | Go/PostgreSQL 集成测试与 Docker/OCI/API 验收测试 |
 
-项目已完成里程碑 0、里程碑 1 以及 M2-01 至 M2-04。由于基于 Digest 的元数据与事件
-协调仍缺失，目前还不是可用的 Registry MVP；下一工作包为 M2-05。
+项目已完成里程碑 0、里程碑 1 以及 M2-01 至 M2-08。下一步为 M2-09 运维日志与指标。
 
 ## 3. 决策门
 
@@ -239,11 +238,11 @@ Bootstrap 入口呈现；管理员邀请 API 不属于这三个 M1 退出流程�
 | M2-02 | `DONE` | 签名密钥配置及支持轮换的 Token 签名/验证边界 | M2-01 | FR-REG-002、非功能安全需求 |
 | M2-03 | `DONE` | `/token` 解析 Scope、认证调用者，并取请求操作与策略允许操作的交集 | M2-02、M1-06 | FR-REG-002–004 |
 | M2-04 | `DONE` | Distribution Token 认证配置与本地网关路由 | M2-03 | FR-REG-001、FR-REG-005 |
-| M2-05 | `PLANNED` | 以 Digest 为键的 Artifact、Manifest/Index 和 Tag 持久化 | M1-07 | FR-ART-001–005 |
-| M2-06 | `PLANNED` | 有认证且支持幂等与重试的 Distribution 事件接收器 | M2-05 | FR-ART-001、FR-ART-004 |
-| M2-07 | `PLANNED` | 仓库 Artifact/Tag 列表与详情 API | M2-05、M2-06 | FR-ART-003、FR-ART-005 |
-| M2-08 | `PLANNED` | 覆盖公开/私有 Pull、Push、过期和 Scope 隔离的 Docker/OCI 端到端套件 | M2-04、M2-06 | FR-REG-003–005 |
-| M2-09 | `PLANNED` | Challenge、Token 决策和事件处理的运维日志与指标 | M2-03、M2-06 | FR-REG-006、FR-OPS-002 |
+| M2-05 | `DONE` | [以 Digest 为键的 Artifact、Manifest/Index 和 Tag 持久化](artifact-metadata-persistence.zh-CN.md) | M1-07 | FR-ART-001–005 |
+| M2-06 | `DONE` | [经过认证的 Distribution Push 事件协调](distribution-event-reconciliation.zh-CN.md)，支持幂等与重试 | M2-05 | FR-ART-001、FR-ART-004 |
+| M2-07 | `DONE` | [Repository Artifact/Tag 列表与详情 API](api.zh-CN.md) | M2-05、M2-06 | FR-ART-003、FR-ART-005 |
+| M2-08 | `DONE` | 覆盖公开/私有 Pull、Push、过期和 Scope 隔离的 Docker/OCI 端到端套件 | M2-04、M2-06 | FR-REG-003–005 |
+| M2-09 | `READY` | Challenge、Token 决策和事件处理的运维日志与指标 | M2-03、M2-06 | FR-REG-006、FR-OPS-002 |
 
 ### M2 安全验收矩阵
 
@@ -275,7 +274,41 @@ PostgreSQL/GORM 集成测试及 Compose 配置校验均通过。随后
 `make test-m2-registry-e2e` 在 Apple Silicon `linux/arm64` Server 的 Docker Engine
 `29.6.2` 上证明 Owner Push、匿名公开 Pull、私有拒绝、Reader 只能 Pull、错误组织拒绝、
 错误凭据及跨 Repository Token 隔离。过期、篡改、错误 Audience 与密钥重叠由 Verifier
-测试覆盖。M2-08 仍为计划状态，因为其事件依赖和完整事件驱动验收套件需要 M2-06。
+测试覆盖。
+
+M2-05 在 2026-08-01 的证据包括获批的
+[Artifact 元数据持久化契约](artifact-metadata-persistence.zh-CN.md)、类型化
+Artifact/Tag/Manifest Descriptor 领域校验、GORM 持久化，以及仅向前 Gormigrate
+迁移 `000006_artifact_metadata`。目标领域测试与隔离 PostgreSQL 集成套件证明完全
+重放、可空元数据补全、冲突回滚、当前 Tag 移动/删除、无 Tag Artifact 保留、未知与
+已确认空 Descriptor Set 的区分、有序 Descriptor 不可变性、跨 Repository 复合外键、
+有界分页、迁移重复执行和并发幂等性。
+
+M2-06 在 2026-08-01 的证据包括已经实现的
+[Distribution 事件协调契约](distribution-event-reconciliation.zh-CN.md)、经过认证的内部
+HTTP Handler、Push 事件映射与 Distribution 重试配置。聚焦测试与真实 PostgreSQL
+测试证明了重复投递、Repository 级身份、当前 Tag 移动、陈旧事件保护、有序 Index
+Descriptor、请求限制、不泄露 Secret 的失败处理及可重试依赖故障。
+`make test-m2-registry-e2e` 还通过受 Token 保护的 Distribution 3.1.1 数据面 Push
+公开与私有镜像，并验证事件生成的 Artifact/Tag 状态。Pull、Delete 和 Mount 事件被
+过滤；删除与保留仍不在已批准范围内。
+
+M2-07 在 2026-08-01 的证据包括同步的 [API 契约](api.zh-CN.md)及 Repository 级
+Artifact/Tag 列表与详情 OpenAPI 3.1 Path。查询 Service 与轻量 HTTP Adapter 会校验
+Digest、Tag Name、不透明 Cursor 及返回的 Repository 身份；所有读取都会认证 Web
+Session，并在访问 Artifact Store 前复用 Repository 可发现性 Policy。聚焦测试与真实
+PostgreSQL 测试证明 Private `404` 不泄露、经过认证的 Public 访问、确定性分页、
+Tag 到 Artifact 解析及如实区分未知与已确认空 Index Descriptor。真实 Docker/OCI
+套件还证明 Push 事件到 API 读取、被拒绝 Push 不产生持久化，以及日志不泄露 Secret。
+
+M2-08 在 2026-08-01 的证据为：在 Apple Silicon 的 `linux/arm64` Server 上，针对
+Docker Engine `29.6.2` 与 Distribution `3.1.1` 运行
+`make test-m2-registry-e2e`。套件证明 Owner Push、匿名公开 Pull、授权私有 Pull、匿名
+与错误组织私有拒绝、READER Push 拒绝、错误凭据、跨 Repository Token 拒绝、
+Pull-only Token 用于 Push 时拒绝，以及在运行时拒绝过期和签名无效 Token。同一次运行
+还保留了 M2-06 与 M2-07 所需的事件生成 Artifact/Tag、Repository 级身份、被拒绝 Push
+不产生持久化、授权 API 读取及日志不泄露 Secret 证据。Registry 聚焦测试、文档检查及
+仓库级 `make check` 门禁也均通过。
 
 ### M2 退出标准
 
@@ -343,12 +376,12 @@ PostgreSQL/GORM 集成测试及 Compose 配置校验均通过。随后
 
 根据当前仓库状态，推荐按以下顺序执行：
 
-1. **实现 M2-05：**增加以不可变 Digest 为键的 Artifact、Manifest/Index 与可变 Tag
-   持久化，不得把路线图数据描述为已经接入。
-2. **Schema 证据通过后实现 M2-06：**增加经过认证、幂等且支持重试的 Distribution
-   事件接收器。
-3. **协调正确性得到证明后再暴露 M2-07：**基于持久化 Digest 模型增加 Repository
-   Artifact/Tag API。
+1. **实现 M2-09：**为 Challenge、Token 决策、通知 Queue 与协调故障增加运维指标和
+   结构化日志。
+2. **复核 M2 退出条件：**验证安全矩阵每一行，再根据当前证据重新规划 M3，且不提前
+   声称 Web Artifact 用户旅程已完成。
+3. **准备 M3-01：**M2 退出复核后，根据当前 API 能力定义最小且如实的 Web 导航与
+   Repository 页面增量。
 
 Commit 应保持足够小，使一个工作包及其测试可一起审查。
 

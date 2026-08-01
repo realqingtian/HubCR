@@ -11,8 +11,10 @@ HubCR 是面向个人开发者与组织的容器镜像中心。它围绕 OCI Reg
 > [!IMPORTANT]
 > HubCR 目前处于早期开发阶段。仓库中已经包含可运行的控制面、本地 Session、组织和
 > Repository API、最小登录态 Web 工作区、短期 Registry Token 签发，以及受 Token
-> 保护的本地 Distribution Gateway。账号 Bootstrap/邀请兑换、Artifact 元数据、事件
-> 协调和安全能力尚未实现。当前版本不能作为生产环境镜像仓库使用。
+> 保护的本地 Distribution Gateway。以 Digest 为键的 Artifact、Manifest/Index 和当前
+> Tag 持久化已接入经过认证的 Distribution Push Event，并通过受 Policy 保护的读取 API
+> 暴露。账号 Bootstrap/邀请兑换、Registry 运维指标、Web Artifact 工作流和软件供应链
+> 安全能力尚未实现。当前版本不能作为生产环境镜像仓库使用。
 
 ## HubCR 的用途
 
@@ -47,13 +49,14 @@ docker push hubcr.io/my-organization/backend:v1.0.0
 
 | 范围 | 当前状态 |
 | --- | --- |
-| Go 控制面 | 已有可运行服务、PostgreSQL 生命周期、依赖感知健康检查、本地 Session、组织、Repository 和集中授权 |
+| Go 控制面 | 已有可运行服务、PostgreSQL 生命周期、依赖感知健康检查、本地 Session、组织、Repository、Artifact/Tag 读取 API 和集中授权 |
 | 异步 Worker | 已有可运行的轮询骨架，尚未连接任务持久化 |
 | Web 应用 | 已有最小登录态 Next.js 工作区，以及经过运行时校验的类型化认证、组织/成员和 Repository 流程 |
 | OCI 数据面 | 本地 Gateway 将 `/v2/` 路由到 MinIO 支持且受 Token 保护的 CNCF Distribution，并将 `/token` 路由到 Go 控制面 |
 | PostgreSQL 与 Redis | 已定义本地 Compose 服务；控制面已连接 PostgreSQL，Redis 尚未接入 |
 | 用户、组织与仓库 | 已有身份/Session API、个人 Namespace、组织/成员 API、集中能力 Policy、受 Policy 保护的 Repository API 及对应最小 Web 工作区；账号 Bootstrap/邀请兑换仍待实现 |
 | Registry Token 服务 | 已实现功能开关控制的 RS256 Token 签发、精确 Repository/Action Scope、JWKS 信任及支持轮换的验证 |
+| Artifact 元数据 | 已通过经过认证的 Distribution Push 事件与 GORM 协调 Repository 级不可变 Digest、Manifest/Index Descriptor 和可变当前 Tag，并提供经过授权的列表/详情 API |
 | Trivy 与 Cosign | 已预留 Worker 边界，集成尚未实现 |
 
 ## 架构
@@ -302,6 +305,8 @@ make infra-down
 | 开发规范 | [Development](docs/development.md) | [开发规范](docs/development.zh-CN.md) |
 | 控制面 API 契约 | [API](docs/api.md) | [API](docs/api.zh-CN.md) |
 | Registry 认证协议 | [Registry auth](docs/registry-authentication.md) | [Registry 认证](docs/registry-authentication.zh-CN.md) |
+| Artifact 元数据持久化 | [Artifact persistence](docs/artifact-metadata-persistence.md) | [Artifact 持久化](docs/artifact-metadata-persistence.zh-CN.md) |
+| Distribution 事件协调 | [Event reconciliation](docs/distribution-event-reconciliation.md) | [事件协调](docs/distribution-event-reconciliation.zh-CN.md) |
 | AI 指令层级 | [Instructions](AGENTS.md) | [AI 指令](AGENTS.zh-CN.md) |
 | 本地基础设施 | [Compose](deployments/compose/README.md) | [本地基础设施](deployments/compose/README.zh-CN.md) |
 | Web 应用 | [Web](frontend/README.md) | [Web 应用](frontend/README.zh-CN.md) |

@@ -24,6 +24,20 @@ auth:
     issuer: hubcr-token-service
     jwks: /run/hubcr/registry-auth/jwks.json
 
+notifications:
+  events:
+    includereferences: true
+  endpoints:
+    - name: hubcr-control-plane
+      url: http://host.docker.internal:8080/internal/registry/events
+      headers:
+        Authorization: [Bearer hubcr-registry-event-dev-only-000000000000]
+      timeout: 2s
+      threshold: 5
+      backoff: 1s
+      ignore:
+        actions: [pull, delete, mount]
+
 http:
   addr: :5000
   headers:

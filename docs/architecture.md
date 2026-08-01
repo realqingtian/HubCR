@@ -9,6 +9,7 @@ Browser --------> Next.js web application
 Docker CLI -----> gateway ---- /api/* --> Go control plane
                          |----- /token --> scoped token endpoint
                          `----- /v2/* ----> CNCF Distribution --> S3 / MinIO
+                                               `-- push events --> Go control plane
 
 Go control plane --> PostgreSQL
                  --> Redis
@@ -22,6 +23,11 @@ Go control plane --> PostgreSQL
 - `backend/internal/app`: application composition only
 - `backend/internal/modules`: business capabilities with explicit ownership
 - `backend/internal/platform`: configuration and infrastructure adapters
+- `backend/internal/modules/registry`: Registry token and Distribution-event business contracts
+- `backend/internal/modules/artifacts`: Artifact/Tag validation and persistence contracts
+- `backend/internal/platform/httpapi/artifacthandler`: authorized Artifact/Tag read adapter
+- `backend/internal/platform/httpapi/registryeventhandler`: authenticated internal event adapter
+- `backend/internal/platform/postgres/artifactstore`: GORM/PostgreSQL Artifact adapter
 - `backend/migrations`: PostgreSQL schema migrations
 - `frontend/app`: Next.js routes and layouts
 - `frontend/features`: product feature code
@@ -34,10 +40,14 @@ Go control plane --> PostgreSQL
 1. Modules own their domain behavior and persistence contracts.
 2. HTTP handlers and database adapters depend on modules, not the reverse.
 3. Cross-module behavior goes through explicit application services.
-4. Distribution remains the source of blob and manifest transport behavior.
-5. HubCR remains the source of users, namespaces, visibility, authorization, and
+4. Distribution remains the source of blob and manifest transport and storage
+   behavior.
+5. HubCR owns repository-scoped Artifact/Tag business metadata. Authenticated
+   Distribution push events reconcile that metadata; authorized read APIs expose it
+   without taking over OCI transport.
+6. HubCR remains the source of users, namespaces, visibility, authorization, and
    security policy.
-6. Scan and signature results are keyed by immutable artifact digest.
+7. Scan and signature results are keyed by immutable artifact digest.
 
 ## Deferred product decisions
 

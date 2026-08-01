@@ -64,6 +64,10 @@ services:
       REGISTRY_AUTH_TOKEN_SERVICE: ${HUBCR_REGISTRY_SERVICE:-hubcr-registry}
       REGISTRY_AUTH_TOKEN_ISSUER: ${HUBCR_REGISTRY_ISSUER:-hubcr-token-service}
       REGISTRY_AUTH_TOKEN_JWKS: /run/hubcr/registry-auth/jwks.json
+      REGISTRY_NOTIFICATIONS_ENDPOINTS_0_URL: http://host.docker.internal:${HUBCR_API_PORT:-8080}/internal/registry/events
+      REGISTRY_NOTIFICATIONS_ENDPOINTS_0_HEADERS: "Authorization: [Bearer ${HUBCR_REGISTRY_EVENT_TOKEN:-hubcr-registry-event-dev-only-000000000000}]"
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
     expose:
       - "5000"
     volumes:

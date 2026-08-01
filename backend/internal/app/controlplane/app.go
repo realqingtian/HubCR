@@ -9,6 +9,7 @@ import (
 	"os"
 	"time"
 
+	"hubcr.io/hubcr/internal/modules/artifacts"
 	"hubcr.io/hubcr/internal/modules/auth"
 	"hubcr.io/hubcr/internal/modules/authorization"
 	"hubcr.io/hubcr/internal/modules/health"
@@ -18,12 +19,15 @@ import (
 	"hubcr.io/hubcr/internal/modules/repositories"
 	"hubcr.io/hubcr/internal/platform/config"
 	"hubcr.io/hubcr/internal/platform/httpapi"
+	"hubcr.io/hubcr/internal/platform/httpapi/artifacthandler"
 	"hubcr.io/hubcr/internal/platform/httpapi/authhandler"
 	"hubcr.io/hubcr/internal/platform/httpapi/organizationhandler"
+	"hubcr.io/hubcr/internal/platform/httpapi/registryeventhandler"
 	"hubcr.io/hubcr/internal/platform/httpapi/registryhandler"
 	"hubcr.io/hubcr/internal/platform/httpapi/repositoryhandler"
 	"hubcr.io/hubcr/internal/platform/httpserver"
 	"hubcr.io/hubcr/internal/platform/postgres"
+	"hubcr.io/hubcr/internal/platform/postgres/artifactstore"
 	"hubcr.io/hubcr/internal/platform/postgres/authstore"
 	"hubcr.io/hubcr/internal/platform/postgres/organizationstore"
 	"hubcr.io/hubcr/internal/platform/postgres/repositorystore"
@@ -78,9 +82,26 @@ func New(ctx context.Context, cfg config.API, logger *slog.Logger) (*App, error)
 		return nil, fmt.Errorf("initialize repository service: %w", err)
 	}
 	repositoryhandler.RegisterRoutes(router, repositoryhandler.New(authService, repositoryService))
+	artifactStore := artifactstore.New(database.ORM())
+	artifactService, err := artifacts.NewService(artifactStore)
+	if err != nil {
+		database.Close()
+		return nil, fmt.Errorf("initialize Artifact persistence service: %w", err)
+	}
+	artifactQueryService, err := artifacts.NewQueryService(artifactStore)
+	if err != nil {
+		database.Close()
+		return nil, fmt.Errorf("initialize Artifact query service: %w", err)
+	}
+	artifactHandler, err := artifacthandler.New(authService, repositoryService, artifactQueryService)
+	if err != nil {
+		database.Close()
+		return nil, fmt.Errorf("initialize Artifact HTTP handler: %w", err)
+	}
+	artifacthandler.RegisterRoutes(router, artifactHandler)
 	if cfg.Registry.Enabled {
 		if err := registerRegistryRoutes(
-			router, cfg.Registry, authService, repositoryService, policy, logger,
+			router, cfg.Registry, authService, repositoryService, policy, artifactService, logger,
 		); err != nil {
 			database.Close()
 			return nil, err
@@ -100,6 +121,7 @@ func registerRegistryRoutes(
 	authService *auth.Service,
 	repositoryService *repositories.Service,
 	policy authorization.Policy,
+	artifactService *artifacts.Service,
 	logger *slog.Logger,
 ) error {
 	privateKeyPEM, err := os.ReadFile(cfg.PrivateKeyFile)
@@ -148,6 +170,17 @@ func registerRegistryRoutes(
 		return fmt.Errorf("initialize Registry token handler: %w", err)
 	}
 	registryhandler.RegisterRoutes(router, handler)
+	notificationService, err := registry.NewNotificationService(repositoryService, artifactService)
+	if err != nil {
+		return fmt.Errorf("initialize Registry notification service: %w", err)
+	}
+	eventToken := []byte(cfg.EventToken)
+	defer clear(eventToken)
+	eventHandler, err := registryeventhandler.New(notificationService, eventToken, logger)
+	if err != nil {
+		return fmt.Errorf("initialize Registry notification handler: %w", err)
+	}
+	registryeventhandler.RegisterRoutes(router, eventHandler)
 	return nil
 }
 

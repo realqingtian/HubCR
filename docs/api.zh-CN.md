@@ -133,6 +133,28 @@ Liveness 只反映进程状态。必需的 PostgreSQL 不可访问时，Readines
   Repository 名称在 Namespace 内唯一。Repository 列表使用统一的 `limit` 加不透明
   `cursor` 契约；标记为 `Sec-Fetch-Site: cross-site` 的变更请求会被拒绝。
 
+## Artifact 与 Tag
+
+所有 Artifact 与 Tag Endpoint 都要求有效的 `hubcr_session` Cookie，并位于
+`/api/v1/namespaces/{namespace}/repositories/{repository}` 之下。
+
+- `GET .../artifacts` 按 Digest 排序列出 Repository 级不可变 Artifact。
+- `GET .../artifacts/{digest}` 返回 Manifest 或 Index 详情。已经确认的 Index
+  Descriptor Set 以有序 `manifests` 返回；未知集合省略该字段，已确认空集合返回 `[]`。
+- `GET .../tags` 按区分大小写的 Tag Name 排序列出可变的当前 Tag 引用。
+- `GET .../tags/{tag}` 返回当前 Tag 引用并嵌入对应 Artifact 详情，使客户端能够查看
+  Media Type、Size、发现时间/来源创建时间及 Index Platform 元数据，而不把 Tag 当成
+  身份。
+- Artifact 与 Tag 列表使用共享的 `limit` 与不透明 `cursor` 契约。Artifact Cursor
+  编码 Digest，Tag Cursor 编码 Tag Name。
+- 访问元数据前会先执行 Repository 可发现性授权。调用者无权发现的 Private
+  Repository 与不存在的 Repository 一样返回 `404 not_found`，且不会执行 Artifact
+  查询。
+- 可选 Media Type、Size、来源创建时间和 Platform 字段在不可用时会被省略。API 不会
+  虚构零值或缺失的 Platform 事实。
+- 这些 Endpoint 只读。Distribution 继续负责 `/v2/`；删除、保留、Tag 历史和垃圾
+  回收仍不属于 M2-07。
+
 ## OpenAPI 所有权
 
 [`openapi.yaml`](openapi.yaml) 是人工维护并经过审查的 OpenAPI 3.1 契约。公共 API

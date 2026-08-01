@@ -25,7 +25,8 @@ Gormigrate 提供普通 `AutoMigrate` 不具备的显式迁移 ID 与校验，�
   `000004_organizations` 将 Namespace 归属扩展到组织，并增加组织及四角色成员关系。
   `000005_repositories` 增加归属于 Namespace 的 Repository 身份、没有数据库默认值的
   显式 `PUBLIC`/`PRIVATE` 可见性、创建者与初始可见性变更证据，以及 Namespace/名称
-  唯一性。
+  唯一性。`000006_artifact_metadata` 增加 Repository 级不可变 Artifact Digest、当前
+  Tag 引用、有序 Manifest Descriptor，以及防止跨 Repository 引用的复合外键。
 
 在仓库根目录针对配置的数据库执行迁移：
 
@@ -39,7 +40,7 @@ make db-migrate
 
 ## 集成测试隔离
 
-执行迁移、PostgreSQL 连接与 Auth Store 生命周期检查：
+执行迁移、PostgreSQL 连接、持久化生命周期、约束与并发检查：
 
 ```bash
 make test-integration

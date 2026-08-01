@@ -14,9 +14,12 @@ reimplemented.
 > HubCR is in early development. The repository contains a runnable control plane,
 > local-session, organization and repository APIs, a minimal authenticated web
 > workspace, short-lived Registry token issuance, and a token-protected local
-> Distribution gateway. Account bootstrap/invitation redemption, artifact metadata,
-> event reconciliation, and security features are not implemented yet. Do not use
-> the current version as a production registry.
+> Distribution gateway. Digest-keyed artifact, manifest/index, and current-tag
+> persistence is connected to authenticated Distribution push events and exposed
+> through policy-protected read APIs. Account bootstrap/invitation redemption,
+> Registry operational metrics, web artifact workflows, and supply-chain security
+> features are not implemented yet. Do not use the current version as a production
+> registry.
 
 ## What HubCR is for
 
@@ -51,13 +54,14 @@ docker push hubcr.io/my-organization/backend:v1.0.0
 
 | Area | Current status |
 | --- | --- |
-| Go control plane | Runnable service with PostgreSQL lifecycle, dependency-aware health, local sessions, organizations, repositories, and centralized authorization |
+| Go control plane | Runnable service with PostgreSQL lifecycle, dependency-aware health, local sessions, organizations, repositories, Artifact/Tag read APIs, and centralized authorization |
 | Asynchronous worker | Runnable polling scaffold; job persistence is not connected |
 | Web application | Minimal authenticated Next.js workspace with typed, runtime-validated auth, organization/member, and repository flows |
 | OCI data plane | Local gateway routes `/v2/` to token-protected CNCF Distribution backed by MinIO and `/token` to the Go control plane |
 | PostgreSQL and Redis | Local Compose services defined; the control plane connects to PostgreSQL, while Redis is not connected |
 | Users, organizations, and repositories | Identity/session APIs, personal namespaces, organization/member APIs, centralized capability policy, policy-protected repository APIs, and the corresponding minimal web workspace exist; account bootstrap/invitation redemption remains pending |
 | Registry token service | Feature-gated RS256 token issuance with exact repository/action scopes, JWKS trust and rotation-ready verification |
+| Artifact metadata | Authenticated Distribution push events reconcile repository-scoped immutable digests, manifest/index descriptors, and mutable current tags through GORM; authorized list/detail APIs are available |
 | Trivy and Cosign | Worker boundaries reserved; integrations are pending |
 
 ## Architecture
@@ -316,6 +320,8 @@ must link to and remain synchronized with its Simplified Chinese counterpart.
 | Development standards | [Development](docs/development.md) | [开发规范](docs/development.zh-CN.md) |
 | Control-plane API contract | [API](docs/api.md) | [API](docs/api.zh-CN.md) |
 | Registry authentication protocol | [Registry auth](docs/registry-authentication.md) | [Registry 认证](docs/registry-authentication.zh-CN.md) |
+| Artifact metadata persistence | [Artifact persistence](docs/artifact-metadata-persistence.md) | [Artifact 持久化](docs/artifact-metadata-persistence.zh-CN.md) |
+| Distribution event reconciliation | [Event reconciliation](docs/distribution-event-reconciliation.md) | [事件协调](docs/distribution-event-reconciliation.zh-CN.md) |
 | AI instruction hierarchy | [Instructions](AGENTS.md) | [AI 指令](AGENTS.zh-CN.md) |
 | Local infrastructure | [Compose](deployments/compose/README.md) | [本地基础设施](deployments/compose/README.zh-CN.md) |
 | Web application | [Web](frontend/README.md) | [Web 应用](frontend/README.zh-CN.md) |

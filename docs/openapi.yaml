@@ -356,6 +356,102 @@ paths:
           $ref: "#/components/responses/NotFound"
         "422":
           $ref: "#/components/responses/ValidationFailed"
+  /api/v1/namespaces/{namespace}/repositories/{repository}/artifacts:
+    parameters:
+      - $ref: "#/components/parameters/NamespaceName"
+      - $ref: "#/components/parameters/RepositoryName"
+    get:
+      operationId: listArtifacts
+      summary: List immutable Artifacts in a discoverable repository
+      security:
+        - sessionCookie: []
+      parameters:
+        - $ref: "#/components/parameters/Limit"
+        - $ref: "#/components/parameters/Cursor"
+      responses:
+        "200":
+          description: A bounded Digest-ordered page of repository-scoped Artifacts.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ArtifactList"
+        "400":
+          $ref: "#/components/responses/InvalidRequest"
+        "401":
+          $ref: "#/components/responses/AuthenticationFailed"
+        "404":
+          $ref: "#/components/responses/NotFound"
+  /api/v1/namespaces/{namespace}/repositories/{repository}/artifacts/{digest}:
+    parameters:
+      - $ref: "#/components/parameters/NamespaceName"
+      - $ref: "#/components/parameters/RepositoryName"
+      - $ref: "#/components/parameters/ArtifactDigest"
+    get:
+      operationId: getArtifact
+      summary: Get Manifest or Index metadata by immutable Digest
+      security:
+        - sessionCookie: []
+      responses:
+        "200":
+          description: Artifact details with ordered child Manifests when confirmed.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Artifact"
+        "400":
+          $ref: "#/components/responses/InvalidRequest"
+        "401":
+          $ref: "#/components/responses/AuthenticationFailed"
+        "404":
+          $ref: "#/components/responses/NotFound"
+  /api/v1/namespaces/{namespace}/repositories/{repository}/tags:
+    parameters:
+      - $ref: "#/components/parameters/NamespaceName"
+      - $ref: "#/components/parameters/RepositoryName"
+    get:
+      operationId: listTags
+      summary: List mutable current Tag references in a discoverable repository
+      security:
+        - sessionCookie: []
+      parameters:
+        - $ref: "#/components/parameters/Limit"
+        - $ref: "#/components/parameters/Cursor"
+      responses:
+        "200":
+          description: A bounded case-sensitive Tag-name-ordered page.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/TagList"
+        "400":
+          $ref: "#/components/responses/InvalidRequest"
+        "401":
+          $ref: "#/components/responses/AuthenticationFailed"
+        "404":
+          $ref: "#/components/responses/NotFound"
+  /api/v1/namespaces/{namespace}/repositories/{repository}/tags/{tag}:
+    parameters:
+      - $ref: "#/components/parameters/NamespaceName"
+      - $ref: "#/components/parameters/RepositoryName"
+      - $ref: "#/components/parameters/TagName"
+    get:
+      operationId: getTag
+      summary: Get a current Tag reference and its Artifact metadata
+      security:
+        - sessionCookie: []
+      responses:
+        "200":
+          description: The current Tag mapping with embedded Artifact details.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Tag"
+        "400":
+          $ref: "#/components/responses/InvalidRequest"
+        "401":
+          $ref: "#/components/responses/AuthenticationFailed"
+        "404":
+          $ref: "#/components/responses/NotFound"
 components:
   securitySchemes:
     sessionCookie:
@@ -402,6 +498,22 @@ components:
         minLength: 1
         maxLength: 64
         pattern: "^[A-Za-z0-9]+(?:[._-][A-Za-z0-9]+)*$"
+    ArtifactDigest:
+      name: digest
+      in: path
+      required: true
+      schema:
+        type: string
+        pattern: "^sha256:[0-9a-f]{64}$"
+    TagName:
+      name: tag
+      in: path
+      required: true
+      schema:
+        type: string
+        minLength: 1
+        maxLength: 128
+        pattern: "^[A-Za-z0-9_][A-Za-z0-9._-]{0,127}$"
     Limit:
       name: limit
       in: query
@@ -709,6 +821,144 @@ components:
             $ref: "#/components/schemas/Repository"
         meta:
           $ref: "#/components/schemas/PageMeta"
+    ArtifactKind:
+      type: string
+      enum:
+        - MANIFEST
+        - INDEX
+    Platform:
+      type: object
+      additionalProperties: false
+      required:
+        - os
+        - architecture
+      properties:
+        os:
+          type: string
+          minLength: 1
+          maxLength: 64
+        architecture:
+          type: string
+          minLength: 1
+          maxLength: 64
+        variant:
+          type: string
+          minLength: 1
+          maxLength: 64
+    ManifestDescriptor:
+      type: object
+      additionalProperties: false
+      required:
+        - position
+        - digest
+      properties:
+        position:
+          type: integer
+          minimum: 0
+        digest:
+          type: string
+          pattern: "^sha256:[0-9a-f]{64}$"
+        media_type:
+          type: string
+          minLength: 1
+          maxLength: 255
+        size_bytes:
+          type: integer
+          format: int64
+          minimum: 0
+        platform:
+          $ref: "#/components/schemas/Platform"
+    Artifact:
+      type: object
+      additionalProperties: false
+      required:
+        - digest
+        - kind
+        - descriptors_complete
+        - discovered_at
+        - updated_at
+      properties:
+        digest:
+          type: string
+          pattern: "^sha256:[0-9a-f]{64}$"
+        kind:
+          $ref: "#/components/schemas/ArtifactKind"
+        media_type:
+          type: string
+          minLength: 1
+          maxLength: 255
+        size_bytes:
+          type: integer
+          format: int64
+          minimum: 0
+        source_created_at:
+          type: string
+          format: date-time
+        descriptors_complete:
+          type: boolean
+          description: True only when the complete ordered Index descriptor set is known.
+        discovered_at:
+          type: string
+          format: date-time
+        updated_at:
+          type: string
+          format: date-time
+        manifests:
+          type: array
+          description: Omitted for an unknown set; an empty array means confirmed empty.
+          items:
+            $ref: "#/components/schemas/ManifestDescriptor"
+    ArtifactList:
+      type: object
+      additionalProperties: false
+      required:
+        - items
+        - meta
+      properties:
+        items:
+          type: array
+          items:
+            $ref: "#/components/schemas/Artifact"
+        meta:
+          $ref: "#/components/schemas/PageMeta"
+    Tag:
+      type: object
+      additionalProperties: false
+      required:
+        - name
+        - digest
+        - created_at
+        - updated_at
+      properties:
+        name:
+          type: string
+          minLength: 1
+          maxLength: 128
+          pattern: "^[A-Za-z0-9_][A-Za-z0-9._-]{0,127}$"
+        digest:
+          type: string
+          pattern: "^sha256:[0-9a-f]{64}$"
+        created_at:
+          type: string
+          format: date-time
+        updated_at:
+          type: string
+          format: date-time
+        artifact:
+          $ref: "#/components/schemas/Artifact"
+    TagList:
+      type: object
+      additionalProperties: false
+      required:
+        - items
+        - meta
+      properties:
+        items:
+          type: array
+          items:
+            $ref: "#/components/schemas/Tag"
+        meta:
+          $ref: "#/components/schemas/PageMeta"
     ErrorEnvelope:
       type: object
       additionalProperties: false
@@ -746,6 +996,15 @@ components:
           minLength: 1
           maxLength: 128
   responses:
+    InvalidRequest:
+      description: A path or pagination value is malformed.
+      headers:
+        X-Request-ID:
+          $ref: "#/components/headers/RequestID"
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/ErrorEnvelope"
     AuthenticationFailed:
       description: The credentials or web session are invalid, expired, or revoked.
       headers:

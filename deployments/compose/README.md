@@ -32,6 +32,9 @@ HUBCR_ENV_FILE=.env.example make infra-down
 Start `make dev-api` in a separate terminal before requesting tokens. It enables the
 local-only HTTP token endpoint and reuses the same ignored signing material. Direct
 API startup remains fail-closed unless all Registry auth settings are supplied.
+The API and Distribution notification endpoint must also receive the same
+`HUBCR_REGISTRY_EVENT_TOKEN`; the documented Make workflow supplies the explicit
+development-only default from `.env.example`.
 
 When overriding the Registry port, pass the same value to `infra-up`, `dev-api`, and
 `infra-smoke`, for example `HUBCR_REGISTRY_PORT=5001`.
@@ -47,9 +50,10 @@ The local endpoints are:
 
 Use the configured `HUBCR_REGISTRY_PORT` instead of `5000` when it is overridden.
 
-Registry token authentication is enabled in the local Make workflow. Distribution
-event notifications and artifact metadata reconciliation are not implemented yet.
-Distribution deletion remains disabled until the deletion policy is approved.
+Registry token authentication and authenticated Distribution push-event delivery are
+enabled in the local Make workflow. Manifest and Index events reconcile Artifact and
+current Tag metadata in PostgreSQL. Pull, delete, and mount events are filtered, and
+Distribution deletion remains disabled until lifecycle policy is approved.
 
 ## Smoke checks
 
@@ -74,9 +78,13 @@ make test-m2-registry-e2e
 ```
 
 It verifies owner push, anonymous public pull, private denial, reader pull without
-push, wrong-organization denial, invalid credentials, and cross-repository token
-isolation. It uses dedicated ports and a separate Compose project, and never reads or
-writes the user's Docker credential store or macOS Keychain.
+push, wrong-organization denial, invalid credentials, cross-repository and
+cross-action token isolation, runtime rejection of expired and invalid-signature
+tokens, event-derived Artifact/Tag metadata, and authorized Artifact API readback. The
+metadata assertions cover repository-scoped identity, Manifest/Index descriptors, Tag
+state, denied-push non-persistence, private `404` non-disclosure, and authenticated
+public access. The target uses dedicated ports and a separate Compose project, and
+never reads or writes the user's Docker credential store or macOS Keychain.
 
 ## Stop and local data
 
@@ -100,9 +108,9 @@ docker compose --env-file .env.example -f deployments/compose/compose.yaml down 
 The authenticated Registry path was verified on 2026-08-01 with Docker Engine
 `29.6.2`, Docker Compose `v5.3.1`, a `linux/arm64` Docker server, PostgreSQL 17,
 Registry 3, and Nginx 1.29 on Apple Silicon. The automated matrix used isolated host
-port `55001` and `alpine:3.22`; all authorization checks passed. Token expiry and
-invalid-signature behavior are covered by Go verifier tests, while the full M2-08
-event-driven OCI suite remains pending M2-06.
+port `55001` and `alpine:3.22`; authorization, cross-repository and cross-action scope
+isolation, runtime token expiry and signature rejection, event-driven Artifact/Tag,
+and Artifact API checks passed.
 
 On macOS, `ControlCenter` may reserve port `5000`; use a consistent alternate
 `HUBCR_REGISTRY_PORT` for `infra-up`, `dev-api`, and `infra-smoke`. This is a host-port

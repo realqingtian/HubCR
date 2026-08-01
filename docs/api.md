@@ -151,6 +151,30 @@ canonical path `/api/v1/namespaces/{namespace}/repositories/{repository}`.
   use the shared `limit` plus opaque `cursor` contract, and mutation requests marked
   `Sec-Fetch-Site: cross-site` are rejected.
 
+## Artifacts and tags
+
+All Artifact and Tag endpoints require a valid `hubcr_session` cookie and are scoped
+under `/api/v1/namespaces/{namespace}/repositories/{repository}`.
+
+- `GET .../artifacts` lists repository-scoped immutable Artifacts ordered by Digest.
+- `GET .../artifacts/{digest}` returns Manifest or Index details. A confirmed Index
+  descriptor set is returned as ordered `manifests`; the field is omitted when the
+  set is unknown and is `[]` when it is confirmed empty.
+- `GET .../tags` lists mutable current Tag references ordered by case-sensitive Tag
+  name.
+- `GET .../tags/{tag}` returns the current Tag reference and embeds the corresponding
+  Artifact detail so clients can inspect media type, size, discovery/source creation
+  time, and Index Platform metadata without treating the Tag as identity.
+- Artifact and Tag lists use the shared `limit` and opaque `cursor` contract. Artifact
+  cursors encode a Digest; Tag cursors encode a Tag name.
+- Repository discovery authorization is evaluated before metadata access. A private
+  repository that the caller cannot discover returns the same `404 not_found` as a
+  missing repository, and no Artifact query runs.
+- Optional media type, size, source creation time, and Platform fields are omitted
+  when unavailable. The API does not invent zero values or missing Platform facts.
+- These endpoints are read-only. Distribution continues to own `/v2/`, and deletion,
+  retention, Tag history, and garbage collection remain outside M2-07.
+
 ## OpenAPI ownership
 
 [`openapi.yaml`](openapi.yaml) is the manually maintained, reviewed OpenAPI 3.1

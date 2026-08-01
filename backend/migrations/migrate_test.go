@@ -26,6 +26,13 @@ func TestMigrationsHaveUniqueOrderedIDs(t *testing.T) {
 	}
 }
 
+func TestArtifactMetadataMigrationIsCurrent(t *testing.T) {
+	migrations := all()
+	if got := migrations[len(migrations)-1].ID; got != "000006_artifact_metadata" {
+		t.Fatalf("last migration ID = %q, want 000006_artifact_metadata", got)
+	}
+}
+
 func TestApplyM0UpgradeRepeatAndUnknownMigrationDetection(t *testing.T) {
 	databaseURL := os.Getenv("HUBCR_TEST_DATABASE_URL")
 	if databaseURL == "" {
@@ -62,6 +69,7 @@ func TestApplyM0UpgradeRepeatAndUnknownMigrationDetection(t *testing.T) {
 	if err := Apply(ctx, pool.ORM()); err != nil {
 		t.Fatalf("second Apply() error = %v", err)
 	}
+	assertArtifactMetadataSchema(t, pool)
 
 	var count int64
 	if err := pool.ORM().Table(options.TableName).Count(&count).Error; err != nil {
@@ -84,5 +92,44 @@ func TestApplyM0UpgradeRepeatAndUnknownMigrationDetection(t *testing.T) {
 	}
 	if err := Apply(ctx, testTransaction); err == nil {
 		t.Fatal("Apply() with unknown migration error = nil, want an error")
+	}
+}
+
+func assertArtifactMetadataSchema(t *testing.T, pool *postgres.Pool) {
+	t.Helper()
+	migrator := pool.ORM().Migrator()
+	for name, record := range map[string]any{
+		"artifacts":            &artifactMigrationRecord{},
+		"tags":                 &tagMigrationRecord{},
+		"manifest_descriptors": &manifestDescriptorMigrationRecord{},
+	} {
+		if !migrator.HasTable(record) {
+			t.Fatalf("artifact metadata table %q is missing", name)
+		}
+	}
+	for record, names := range map[any][]string{
+		&artifactMigrationRecord{}: {
+			"ck_artifacts_digest", "ck_artifacts_kind", "ck_artifacts_size",
+			"ck_artifacts_descriptor_kind", "ck_artifacts_timestamps",
+		},
+		&tagMigrationRecord{}: {
+			"ck_tags_name", "ck_tags_timestamps", "fk_tags_artifact",
+		},
+		&manifestDescriptorMigrationRecord{}: {
+			"ck_manifest_descriptors_distinct", "ck_manifest_descriptors_position",
+			"ck_manifest_descriptors_platform", "fk_manifest_descriptors_index",
+			"fk_manifest_descriptors_child",
+		},
+	} {
+		for _, name := range names {
+			if !migrator.HasConstraint(record, name) {
+				t.Fatalf("artifact metadata constraint %q is missing", name)
+			}
+		}
+	}
+	for _, name := range []string{"uq_artifacts_repository_digest", "uq_artifacts_repository_id_id"} {
+		if !migrator.HasIndex(&artifactMigrationRecord{}, name) {
+			t.Fatalf("artifact metadata index %q is missing", name)
+		}
 	}
 }

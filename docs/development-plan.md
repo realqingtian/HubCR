@@ -4,7 +4,7 @@
 
 - Status: active living plan
 - Plan start: 2026-08-01
-- Current stage: M2-01 through M2-04 are done; M2-05 is next
+- Current stage: M2-01 through M2-08 are done; M2-09 is next
 - Requirements: [HubCR product requirements](requirements.md)
 
 This plan converts the product baseline into ordered, testable work. It is a delivery
@@ -54,11 +54,10 @@ product decisions, external reviews, or environment downloads.
 | Compose definition | PostgreSQL 17, Redis 7, MinIO and Distribution 3 configuration parses successfully | `docker compose ... config --quiet` |
 | Compose runtime | Full stack smoke passes on Apple Silicon; the Registry host port can be overridden when macOS reserves `5000` | [Compose smoke evidence](../deployments/compose/README.md#verified-environment) |
 | Application integration | API owns a PostgreSQL pool and dependency-aware readiness; worker and Redis connections remain pending | Unit, live dependency-loss/recovery, and graceful-shutdown checks |
-| Registry integration | Scoped token issuance and the token-protected local gateway are complete; event ingestion and artifact metadata remain pending | Go/PostgreSQL integration and Docker/OCI acceptance tests |
+| Registry integration | Scoped token issuance, the token-protected local gateway, push-event reconciliation, and authorized Artifact/Tag read APIs are complete | Go/PostgreSQL integration and Docker/OCI/API acceptance tests |
 
-The project has completed Milestones 0 and 1 plus M2-01 through M2-04. It is not yet a
-usable Registry MVP because digest-based metadata and event reconciliation are still
-missing; M2-05 is the next work package.
+The project has completed Milestones 0 and 1 plus M2-01 through M2-08. M2-09
+operational logging and metrics are next.
 
 ## 3. Decision gates
 
@@ -274,11 +273,11 @@ and data-plane boundary.
 | M2-02 | `DONE` | Signing-key configuration and rotation-ready token signer/verifier boundary | M2-01 | FR-REG-002, NFR security |
 | M2-03 | `DONE` | `/token` endpoint parses requested scopes, authenticates callers and intersects requested actions with policy | M2-02, M1-06 | FR-REG-002–004 |
 | M2-04 | `DONE` | Distribution token-auth configuration and local gateway routing | M2-03 | FR-REG-001, FR-REG-005 |
-| M2-05 | `PLANNED` | Artifact, manifest/index and tag persistence keyed by digest | M1-07 | FR-ART-001–005 |
-| M2-06 | `PLANNED` | Authenticated Distribution event receiver with idempotency and retry behavior | M2-05 | FR-ART-001, FR-ART-004 |
-| M2-07 | `PLANNED` | Repository artifact/tag list and detail APIs | M2-05, M2-06 | FR-ART-003, FR-ART-005 |
-| M2-08 | `PLANNED` | Docker/OCI end-to-end suite for public/private pull, push, expiry and scope isolation | M2-04, M2-06 | FR-REG-003–005 |
-| M2-09 | `PLANNED` | Operational logging and metrics around challenge, token decisions and event handling | M2-03, M2-06 | FR-REG-006, FR-OPS-002 |
+| M2-05 | `DONE` | [Artifact, manifest/index and tag persistence](artifact-metadata-persistence.md) keyed by digest | M1-07 | FR-ART-001–005 |
+| M2-06 | `DONE` | [Authenticated Distribution push-event reconciliation](distribution-event-reconciliation.md) with idempotency and retry behavior | M2-05 | FR-ART-001, FR-ART-004 |
+| M2-07 | `DONE` | [Repository Artifact/Tag list and detail APIs](api.md) | M2-05, M2-06 | FR-ART-003, FR-ART-005 |
+| M2-08 | `DONE` | Docker/OCI end-to-end suite for public/private pull, push, expiry and scope isolation | M2-04, M2-06 | FR-REG-003–005 |
+| M2-09 | `READY` | Operational logging and metrics around challenge, token decisions and event handling | M2-03, M2-06 | FR-REG-006, FR-OPS-002 |
 
 ### M2 security acceptance matrix
 
@@ -313,8 +312,49 @@ validation passed. `make test-m2-registry-e2e` then used Docker Engine `29.6.2` 
 Apple Silicon `linux/arm64` server to prove owner push, anonymous public pull, private
 denial, reader pull without push, wrong-organization denial, invalid credentials, and
 cross-repository token isolation. Expiry, tampering, invalid audience, and key overlap
-are covered by verifier tests. M2-08 remains planned because its event dependency and
-full event-driven acceptance suite require M2-06.
+are covered by verifier tests.
+
+M2-05 evidence on 2026-08-01 is the accepted
+[Artifact metadata persistence contract](artifact-metadata-persistence.md), typed
+Artifact/Tag/Manifest descriptor domain validation, GORM persistence, and forward
+Gormigrate migration `000006_artifact_metadata`. Focused domain tests and the isolated
+PostgreSQL integration suite prove exact replay, nullable metadata enrichment,
+conflict rollback, current Tag movement/removal, untagged Artifact retention,
+unknown-versus-empty descriptor sets, immutable ordered descriptors,
+cross-repository composite foreign keys, bounded pagination, migration repeatability,
+and concurrent idempotency.
+
+M2-06 evidence on 2026-08-01 is the implemented
+[Distribution event reconciliation contract](distribution-event-reconciliation.md),
+an authenticated internal HTTP handler, push-event mapping, and Distribution retry
+configuration. Focused and real PostgreSQL tests prove duplicate delivery,
+repository-scoped identity, current Tag movement, stale-event protection, ordered
+Index descriptors, request limits, secret-safe failure handling, and retryable
+dependency failure. `make test-m2-registry-e2e` additionally pushed public and private
+images through the token-protected Distribution 3.1.1 data plane and verified the
+event-derived Artifact/Tag state. Pull, delete, and mount events are filtered; deletion
+and retention remain outside the approved scope.
+
+M2-07 evidence on 2026-08-01 includes the synchronized [API contract](api.md) and
+OpenAPI 3.1 paths for repository-scoped Artifact/Tag lists and details. The query
+service and thin HTTP adapter validate Digests, Tag names, opaque cursors, and returned
+repository identity; all reads authenticate a web session and reuse repository
+discovery policy before touching Artifact storage. Focused and real PostgreSQL tests
+prove private `404` non-disclosure, authenticated public access, deterministic
+pagination, Tag-to-Artifact resolution, and truthful unknown-versus-confirmed-empty
+Index descriptors. The real Docker/OCI suite additionally proves push event to API
+readback, denied-push non-persistence, and secret-safe logs.
+
+M2-08 evidence on 2026-08-01 is `make test-m2-registry-e2e` against Docker Engine
+`29.6.2`, Distribution `3.1.1`, and a `linux/arm64` server on Apple Silicon. The suite
+proves owner push, anonymous public pull, authorized private pull, anonymous and
+wrong-organization private denial, READER push denial, invalid credentials,
+cross-repository token rejection, pull-only-token push rejection, and runtime
+rejection of expired and invalid-signature tokens. The same run retains the
+event-derived Artifact/Tag, repository-scoped identity, denied-push non-persistence,
+authorized API readback, and secret-safe log evidence required by M2-06 and M2-07.
+Focused Registry tests, documentation checks, and the repository-wide `make check`
+gate also pass.
 
 ### M2 exit criteria
 
@@ -391,12 +431,12 @@ operator workflow, and failure-recovery test. This milestone is not a single rel
 
 This is the recommended order from the current repository state:
 
-1. **Implement M2-05:** add artifact, manifest/index, and mutable tag persistence keyed
-   by immutable digest, without treating roadmap data as already ingested.
-2. **Implement M2-06 after schema evidence:** add the authenticated, idempotent
-   Distribution event receiver and retry behavior.
-3. **Expose M2-07 only after reconciliation is proven:** add repository artifact/tag
-   APIs over the persisted digest model.
+1. **Implement M2-09:** add operational metrics and structured logs around challenge,
+   token decisions, notification queues, and reconciliation failures.
+2. **Review the M2 exit:** verify every security-matrix row and then re-plan M3 from
+   current evidence without claiming the Web Artifact journey early.
+3. **Prepare M3-01:** after the M2 exit review, define the smallest truthful web
+   navigation and repository-page increment from current API capabilities.
 
 Keep commits small enough that one work package and its tests can be reviewed together.
 
