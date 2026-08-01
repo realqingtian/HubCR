@@ -3,6 +3,7 @@
 HUBCR_COMPOSE_FILE ?= deployments/compose/compose.yaml
 HUBCR_ENV_FILE ?= .env
 HUBCR_REGISTRY_PORT ?= 5000
+HUBCR_REGISTRY_DEBUG_PORT ?= 5002
 HUBCR_MINIO_PORT ?= 9000
 HUBCR_REGISTRY_AUTH_DIR ?= $(CURDIR)/.data/registry-auth
 HUBCR_REGISTRY_AUTH_ENABLED ?= true
@@ -59,6 +60,8 @@ infra-smoke:
 	curl --fail --silent --show-error --output /dev/null --write-out 'MinIO HTTP %{http_code}\n' http://localhost:$(HUBCR_MINIO_PORT)/minio/health/live
 	test "$$(curl --silent --output /dev/null --write-out '%{http_code}' http://localhost:$(HUBCR_REGISTRY_PORT)/v2/)" = 401
 	curl --silent --dump-header - --output /dev/null http://localhost:$(HUBCR_REGISTRY_PORT)/v2/ | grep -Fqi 'www-authenticate: Bearer realm="http://localhost:$(HUBCR_REGISTRY_PORT)/token",service="$(HUBCR_REGISTRY_SERVICE)"'
+	curl --fail --silent --show-error http://127.0.0.1:$(HUBCR_REGISTRY_DEBUG_PORT)/metrics | grep -Fq '# HELP'
+	curl --fail --silent --show-error http://127.0.0.1:$(HUBCR_REGISTRY_DEBUG_PORT)/debug/vars | grep -Fq 'notifications'
 	@echo 'Registry HTTP 401 with scoped Bearer challenge'
 
 test:

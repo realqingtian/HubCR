@@ -6,6 +6,7 @@ import (
 	"errors"
 	"fmt"
 	"log/slog"
+	"net/http"
 	"os"
 	"time"
 
@@ -26,6 +27,7 @@ import (
 	"hubcr.io/hubcr/internal/platform/httpapi/registryhandler"
 	"hubcr.io/hubcr/internal/platform/httpapi/repositoryhandler"
 	"hubcr.io/hubcr/internal/platform/httpserver"
+	"hubcr.io/hubcr/internal/platform/observability"
 	"hubcr.io/hubcr/internal/platform/postgres"
 	"hubcr.io/hubcr/internal/platform/postgres/artifactstore"
 	"hubcr.io/hubcr/internal/platform/postgres/authstore"
@@ -124,6 +126,8 @@ func registerRegistryRoutes(
 	artifactService *artifacts.Service,
 	logger *slog.Logger,
 ) error {
+	metrics := observability.NewRegistryMetrics()
+	router.HandleHTTP(http.MethodGet, observability.RegistryMetricsPath, metrics.Handler())
 	privateKeyPEM, err := os.ReadFile(cfg.PrivateKeyFile)
 	if err != nil {
 		return errors.New("initialize Registry token signing key: file is unreadable")
@@ -165,7 +169,7 @@ func registerRegistryRoutes(
 	if err != nil {
 		return fmt.Errorf("initialize Registry token service: %w", err)
 	}
-	handler, err := registryhandler.New(tokenService, logger)
+	handler, err := registryhandler.New(tokenService, logger, metrics)
 	if err != nil {
 		return fmt.Errorf("initialize Registry token handler: %w", err)
 	}
@@ -176,7 +180,7 @@ func registerRegistryRoutes(
 	}
 	eventToken := []byte(cfg.EventToken)
 	defer clear(eventToken)
-	eventHandler, err := registryeventhandler.New(notificationService, eventToken, logger)
+	eventHandler, err := registryeventhandler.New(notificationService, eventToken, logger, metrics)
 	if err != nil {
 		return fmt.Errorf("initialize Registry notification handler: %w", err)
 	}

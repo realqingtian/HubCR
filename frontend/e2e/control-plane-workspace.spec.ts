@@ -120,6 +120,23 @@ async function installControlPlaneMock(page: Page, authenticatedInitially: boole
       await fulfill(route, repository, 201);
       return;
     }
+    const repositoryDetailMatch = path.match(/^\/api\/v1\/namespaces\/([^/]+)\/repositories\/([^/]+)$/);
+    if (repositoryDetailMatch && request.method() === "GET") {
+      const candidates = repositories.get(repositoryDetailMatch[1]) ?? [];
+      const repository = candidates.find((candidate) => (
+        typeof candidate === "object" && candidate !== null &&
+        "name" in candidate && candidate.name === repositoryDetailMatch[2]
+      ));
+      if (repository !== undefined) {
+        await fulfill(route, repository);
+        return;
+      }
+      await fulfill(route, {
+        error: { code: "not_found", message: "resource not found" },
+        request_id: "e2e-repository-not-found",
+      }, 404);
+      return;
+    }
     await fulfill(route, {
       error: { code: "not_found", message: "mock route not found" },
       request_id: "e2e-not-found",
@@ -144,6 +161,17 @@ test("signs in and completes the personal and organization ownership flows", asy
   await page.getByLabel("Description").first().fill("personal images");
   await page.getByRole("button", { name: "Create repository" }).click();
   await expect(page.getByText("owner/backend")).toBeVisible();
+
+  await page.getByRole("link", { name: "View namespace" }).click();
+  await expect(page).toHaveURL(/\/namespaces\/owner$/);
+  await expect(page.getByRole("heading", { name: "hubcr.io/owner" })).toBeVisible();
+  await page.getByRole("link", { name: "View repository" }).click();
+  await expect(page).toHaveURL(/\/namespaces\/owner\/repositories\/backend$/);
+  await expect(page.getByRole("heading", { name: "owner/backend" })).toBeVisible();
+  await expect(page.getByRole("heading", { name: "Artifacts and tags" })).toBeVisible();
+  await expect(page.getByText("Unavailable in this web build")).toBeVisible();
+  await page.getByLabel("Breadcrumb").getByRole("link", { name: "Overview" }).click();
+  await expect(page.getByRole("heading", { name: "Control-plane workspace" })).toBeVisible();
 
   await page.getByLabel("Namespace", { exact: true }).fill("platform-team");
   await page.getByLabel("Description").nth(1).fill("platform team");
@@ -177,4 +205,24 @@ test("shows backend authorization denial instead of inferring permission", async
   await page.getByLabel("Name", { exact: true }).fill("denied-app");
   await page.getByRole("button", { name: "Create repository" }).click();
   await expect(page.getByText("Your account does not have permission for this action.", { exact: true })).toBeVisible();
+});
+
+test("keeps repository non-disclosure truthful on a direct route", async ({ page }) => {
+  await installControlPlaneMock(page, true);
+  await page.goto("/namespaces/owner/repositories/missing");
+
+  await expect(page.getByText("Repository not found")).toBeVisible();
+  await expect(page.getByText("The repository does not exist or your current session cannot discover it.")).toBeVisible();
+});
+
+test("keeps authenticated navigation usable at a mobile width", async ({ page }) => {
+  await page.setViewportSize({ width: 390, height: 844 });
+  await installControlPlaneMock(page, true);
+  await page.goto("/namespaces/owner");
+
+  await expect(page.getByLabel("Workspace").getByRole("link", { name: "Overview" })).toBeVisible();
+  await expect(page.getByLabel("Workspace").getByRole("link", { name: "Personal namespace" })).toBeVisible();
+  await expect(page.getByRole("button", { name: "Sign out" })).toBeVisible();
+  const horizontalOverflow = await page.evaluate(() => document.documentElement.scrollWidth > document.documentElement.clientWidth);
+  expect(horizontalOverflow).toBe(false);
 });

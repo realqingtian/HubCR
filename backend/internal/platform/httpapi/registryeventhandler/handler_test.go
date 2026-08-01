@@ -1,6 +1,7 @@
 package registryeventhandler
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
 	"errors"
@@ -14,6 +15,7 @@ import (
 
 	"hubcr.io/hubcr/internal/modules/registry"
 	"hubcr.io/hubcr/internal/platform/httpapi"
+	"hubcr.io/hubcr/internal/platform/observability"
 )
 
 const registryEventTestToken = "0123456789abcdef0123456789abcdef"
@@ -135,13 +137,97 @@ func TestHandlerMapsReconciliationFailuresForDistributionRetry(t *testing.T) {
 	}
 }
 
+func TestHandlerRecordsNotificationMetricsAndCorrelatedLogs(t *testing.T) {
+	metrics := observability.NewRegistryMetrics()
+	var logs bytes.Buffer
+	handler, err := New(
+		&eventProcessor{result: registry.NotificationResult{Processed: 2, Ignored: 1}},
+		[]byte(registryEventTestToken),
+		slog.New(slog.NewJSONHandler(&logs, nil)),
+		metrics,
+	)
+	if err != nil {
+		t.Fatalf("New() error = %v", err)
+	}
+	request := httptest.NewRequest(
+		http.MethodPost,
+		RegistryEventPath,
+		strings.NewReader(`{"events":[{},{},{}]}`),
+	)
+	request.Header.Set("Authorization", "Bearer "+registryEventTestToken)
+	request.Header.Set("Content-Type", registry.NotificationEventsMediaType)
+	request.Header.Set(httpapi.RequestIDHeader, "notification-request")
+	recorder := httptest.NewRecorder()
+	httpapi.WithRequestID(handler).ServeHTTP(recorder, request)
+	if recorder.Code != http.StatusAccepted {
+		t.Fatalf("status = %d", recorder.Code)
+	}
+
+	metricBody := scrapeRegistryMetrics(t, metrics)
+	for _, line := range []string{
+		`hubcr_registry_notification_requests_total{outcome="accepted"} 1`,
+		`hubcr_registry_notification_events_total{outcome="processed"} 2`,
+		`hubcr_registry_notification_events_total{outcome="ignored"} 1`,
+	} {
+		if !strings.Contains(metricBody, line+"\n") {
+			t.Fatalf("metrics omitted %q:\n%s", line, metricBody)
+		}
+	}
+	for _, field := range []string{
+		`"request_id":"notification-request"`,
+		`"outcome":"accepted"`,
+		`"event_count":3`,
+		`"processed":2`,
+		`"ignored":1`,
+	} {
+		if !strings.Contains(logs.String(), field) {
+			t.Fatalf("structured log omitted %q: %s", field, logs.String())
+		}
+	}
+	if strings.Contains(logs.String(), registryEventTestToken) || strings.Contains(logs.String(), `"events"`) {
+		t.Fatalf("structured log included a token or event payload: %s", logs.String())
+	}
+
+	failing, err := New(
+		&eventProcessor{err: registry.ErrNotificationUnavailable},
+		[]byte(registryEventTestToken),
+		slog.New(slog.NewJSONHandler(&logs, nil)),
+		metrics,
+	)
+	if err != nil {
+		t.Fatalf("New(failing) error = %v", err)
+	}
+	failureRequest := httptest.NewRequest(
+		http.MethodPost,
+		RegistryEventPath,
+		strings.NewReader(`{"events":[{}]}`),
+	)
+	failureRequest.Header.Set("Authorization", "Bearer "+registryEventTestToken)
+	failureRequest.Header.Set("Content-Type", registry.NotificationEventsMediaType)
+	failureRecorder := httptest.NewRecorder()
+	failing.ServeHTTP(failureRecorder, failureRequest)
+	if failureRecorder.Code != http.StatusServiceUnavailable {
+		t.Fatalf("failure status = %d", failureRecorder.Code)
+	}
+	metricBody = scrapeRegistryMetrics(t, metrics)
+	for _, line := range []string{
+		`hubcr_registry_notification_requests_total{outcome="unavailable"} 1`,
+		`hubcr_registry_reconciliation_failures_total{class="unavailable"} 1`,
+	} {
+		if !strings.Contains(metricBody, line+"\n") {
+			t.Fatalf("failure metrics omitted %q:\n%s", line, metricBody)
+		}
+	}
+}
+
 func TestRegisterRoutesAndConstructorValidation(t *testing.T) {
 	logger := slog.New(slog.NewTextHandler(io.Discard, nil))
 	processor := &eventProcessor{}
-	if _, err := New(nil, []byte(registryEventTestToken), logger); err == nil {
+	metrics := observability.NewRegistryMetrics()
+	if _, err := New(nil, []byte(registryEventTestToken), logger, metrics); err == nil {
 		t.Fatal("New(nil processor) error = nil")
 	}
-	if _, err := New(processor, []byte("short"), logger); err == nil {
+	if _, err := New(processor, []byte("short"), logger, metrics); err == nil {
 		t.Fatal("New(short token) error = nil")
 	}
 	handler := newEventHandler(t, processor)
@@ -163,11 +249,23 @@ func newEventHandler(t *testing.T, processor NotificationProcessor) *Handler {
 		processor,
 		[]byte(registryEventTestToken),
 		slog.New(slog.NewTextHandler(io.Discard, nil)),
+		observability.NewRegistryMetrics(),
 	)
 	if err != nil {
 		t.Fatalf("New() error = %v", err)
 	}
 	return handler
+}
+
+func scrapeRegistryMetrics(t *testing.T, metrics *observability.RegistryMetrics) string {
+	t.Helper()
+	request := httptest.NewRequest(http.MethodGet, observability.RegistryMetricsPath, nil)
+	recorder := httptest.NewRecorder()
+	metrics.Handler().ServeHTTP(recorder, request)
+	if recorder.Code != http.StatusOK {
+		t.Fatalf("metrics status = %d", recorder.Code)
+	}
+	return recorder.Body.String()
 }
 
 type eventProcessor struct {

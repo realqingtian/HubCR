@@ -27,6 +27,7 @@ Go control plane --> PostgreSQL
 - `backend/internal/modules/artifacts`: Artifact/Tag validation and persistence contracts
 - `backend/internal/platform/httpapi/artifacthandler`: authorized Artifact/Tag read adapter
 - `backend/internal/platform/httpapi/registryeventhandler`: authenticated internal event adapter
+- `backend/internal/platform/observability`: bounded process metrics and internal exposition adapters
 - `backend/internal/platform/postgres/artifactstore`: GORM/PostgreSQL Artifact adapter
 - `backend/migrations`: PostgreSQL schema migrations
 - `frontend/app`: Next.js routes and layouts
@@ -34,6 +35,12 @@ Go control plane --> PostgreSQL
 - `frontend/lib`: shared typed API client and utilities
 - `frontend/providers`: application-wide client providers
 - `deployments/compose`: local infrastructure
+
+The current web route boundary uses a shared authenticated shell around `/`,
+`/namespaces/[namespace]`, and
+`/namespaces/[namespace]/repositories/[repository]`. Route files validate dynamic OCI
+name components and delegate API-backed presentation to the `namespaces` and
+`repositories` features; they do not own authorization decisions.
 
 ## Module rules
 
@@ -48,6 +55,9 @@ Go control plane --> PostgreSQL
 6. HubCR remains the source of users, namespaces, visibility, authorization, and
    security policy.
 7. Scan and signature results are keyed by immutable artifact digest.
+8. Registry operational signals follow the same ownership boundary: the gateway and
+   Distribution observe `/v2/` challenges and delivery queues; the Go control plane
+   observes token decisions and notification reconciliation.
 
 ## Deferred product decisions
 

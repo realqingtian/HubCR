@@ -68,6 +68,8 @@ services:
       REGISTRY_NOTIFICATIONS_ENDPOINTS_0_HEADERS: "Authorization: [Bearer ${HUBCR_REGISTRY_EVENT_TOKEN:-hubcr-registry-event-dev-only-000000000000}]"
     extra_hosts:
       - "host.docker.internal:host-gateway"
+    ports:
+      - "127.0.0.1:${HUBCR_REGISTRY_DEBUG_PORT:-5002}:5001"
     expose:
       - "5000"
     volumes:

@@ -14,6 +14,7 @@ import (
 
 	"hubcr.io/hubcr/internal/modules/registry"
 	"hubcr.io/hubcr/internal/platform/httpapi"
+	"hubcr.io/hubcr/internal/platform/observability"
 )
 
 func TestTokenHandlerSuccessContractAndCredentialIsolation(t *testing.T) {
@@ -96,6 +97,62 @@ func TestTokenHandlerAcceptsOfflineTokenWithoutIssuingRefreshToken(t *testing.T)
 	}
 	if strings.Contains(recorder.Body.String(), "refresh_token") {
 		t.Fatalf("response unexpectedly contains a refresh token: %s", recorder.Body.String())
+	}
+}
+
+func TestTokenHandlerRecordsBoundedPolicyDecisionMetricsAndLogs(t *testing.T) {
+	metrics := observability.NewRegistryMetrics()
+	var logs bytes.Buffer
+	handler, err := New(
+		&handlerIssuer{result: registry.IssueResult{
+			Token: "opaque-token", ExpiresIn: 300, IssuedAt: time.Now(),
+			Access: []registry.Access{{
+				Type: registry.ResourceRepository, Name: "team/image",
+				Actions: []registry.Action{registry.ActionPull},
+			}},
+		}},
+		slog.New(slog.NewJSONHandler(&logs, nil)),
+		metrics,
+	)
+	if err != nil {
+		t.Fatalf("New() error = %v", err)
+	}
+	request := httptest.NewRequest(
+		http.MethodGet,
+		"/token?service=hubcr-registry&scope=repository%3Ateam%2Fimage%3Apull%2Cpush",
+		nil,
+	)
+	request.Header.Set(httpapi.RequestIDHeader, "token-decision-request")
+	recorder := httptest.NewRecorder()
+	httpapi.WithRequestID(handler).ServeHTTP(recorder, request)
+	if recorder.Code != http.StatusOK {
+		t.Fatalf("status = %d, body = %s", recorder.Code, recorder.Body.String())
+	}
+
+	metricBody := scrapeMetrics(t, metrics)
+	for _, line := range []string{
+		`hubcr_registry_token_requests_total{outcome="issued"} 1`,
+		`hubcr_registry_token_actions_total{action="pull",decision="granted"} 1`,
+		`hubcr_registry_token_actions_total{action="push",decision="denied"} 1`,
+	} {
+		if !strings.Contains(metricBody, line+"\n") {
+			t.Fatalf("metrics omitted %q:\n%s", line, metricBody)
+		}
+	}
+	logged := logs.String()
+	for _, field := range []string{
+		`"request_id":"token-decision-request"`,
+		`"outcome":"issued"`,
+		`"requested_action_count":2`,
+		`"granted_action_count":1`,
+		`"denied_action_count":1`,
+	} {
+		if !strings.Contains(logged, field) {
+			t.Fatalf("structured log omitted %q: %s", field, logged)
+		}
+	}
+	if strings.Contains(logged, "team/image") || strings.Contains(logged, "opaque-token") {
+		t.Fatalf("structured log included repository or token content: %s", logged)
 	}
 }
 
@@ -227,7 +284,11 @@ func TestTokenHandlerMapsWrappedUnavailableAndRecoversWithRegistryEnvelope(t *te
 
 func newTestHandler(t *testing.T, issuer TokenIssuer, logs *bytes.Buffer) *Handler {
 	t.Helper()
-	handler, err := New(issuer, slog.New(slog.NewJSONHandler(logs, nil)))
+	handler, err := New(
+		issuer,
+		slog.New(slog.NewJSONHandler(logs, nil)),
+		observability.NewRegistryMetrics(),
+	)
 	if err != nil {
 		t.Fatalf("New() error = %v", err)
 	}
@@ -241,6 +302,17 @@ func assertProtocolHeaders(t *testing.T, recorder *httptest.ResponseRecorder) {
 		recorder.Header().Get("Pragma") != "no-cache" {
 		t.Fatalf("protocol headers = %#v", recorder.Header())
 	}
+}
+
+func scrapeMetrics(t *testing.T, metrics *observability.RegistryMetrics) string {
+	t.Helper()
+	request := httptest.NewRequest(http.MethodGet, observability.RegistryMetricsPath, nil)
+	recorder := httptest.NewRecorder()
+	metrics.Handler().ServeHTTP(recorder, request)
+	if recorder.Code != http.StatusOK {
+		t.Fatalf("metrics status = %d", recorder.Code)
+	}
+	return recorder.Body.String()
 }
 
 type handlerIssuer struct {

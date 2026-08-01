@@ -1,3 +1,30 @@
+map $uri $hubcr_route {
+    default other;
+    ~^/v2/ registry;
+    /token token;
+    ~^/api/ api;
+}
+
+map "$hubcr_route:$status" $hubcr_registry_challenge {
+    default false;
+    "registry:401" true;
+}
+
+log_format hubcr_json escape=json '{'
+    '"time":"$time_iso8601",'
+    '"service":"hubcr-gateway",'
+    '"request_id":"$request_id",'
+    '"route":"$hubcr_route",'
+    '"method":"$request_method",'
+    '"status":$status,'
+    '"upstream_status":"$upstream_status",'
+    '"duration_seconds":$request_time,'
+    '"upstream_duration_seconds":"$upstream_response_time",'
+    '"registry_challenge":$hubcr_registry_challenge'
+    '}';
+
+access_log /dev/stdout hubcr_json;
+
 server {
     listen 5000;
     server_name _;

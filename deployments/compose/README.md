@@ -37,7 +37,8 @@ The API and Distribution notification endpoint must also receive the same
 development-only default from `.env.example`.
 
 When overriding the Registry port, pass the same value to `infra-up`, `dev-api`, and
-`infra-smoke`, for example `HUBCR_REGISTRY_PORT=5001`.
+`infra-smoke`, for example `HUBCR_REGISTRY_PORT=5001`. Distribution's localhost-only
+debug listener separately defaults to `HUBCR_REGISTRY_DEBUG_PORT=5002`.
 
 The local endpoints are:
 
@@ -46,6 +47,7 @@ The local endpoints are:
 - MinIO S3 API: `http://localhost:9000`
 - MinIO console: `http://localhost:9001`
 - OCI gateway (`/v2/` and `/token`): `http://localhost:5000`
+- Distribution operations (`/metrics` and `/debug/vars`): `http://127.0.0.1:5002`
 - Go control plane: `http://localhost:8080`
 
 Use the configured `HUBCR_REGISTRY_PORT` instead of `5000` when it is overridden.
@@ -54,6 +56,13 @@ Registry token authentication and authenticated Distribution push-event delivery
 enabled in the local Make workflow. Manifest and Index events reconcile Artifact and
 current Tag metadata in PostgreSQL. Pull, delete, and mount events are filtered, and
 Distribution deletion remains disabled until lifecycle policy is approved.
+
+The gateway emits secret-safe JSON access logs and marks Registry `401` responses
+with `registry_challenge=true`. Distribution uses JSON application logs and exposes
+Prometheus plus notification queue state only through the loopback debug port. With
+Registry auth enabled, the direct Go listener exposes bounded token and notification
+counters at `GET /internal/metrics`; that endpoint is intentionally not routed by the
+gateway. See [Registry operational observability](../../docs/registry-observability.md).
 
 ## Smoke checks
 
@@ -65,9 +74,10 @@ HUBCR_ENV_FILE=.env.example make infra-smoke
 ```
 
 The expected results are healthy infrastructure, PostgreSQL `accepting connections`,
-Redis `PONG`, MinIO `200`, and Registry `401` with an exact scoped Bearer challenge
-whose realm is `http://localhost:5000/token`. A `401` capability response is correct;
-an unauthenticated `200` would mean Registry authorization was bypassed.
+Redis `PONG`, MinIO `200`, Registry `401` with an exact scoped Bearer challenge whose
+realm is `http://localhost:5000/token`, and reachable localhost-only Distribution
+metrics and notification variables. A `401` capability response is correct; an
+unauthenticated `200` would mean Registry authorization was bypassed.
 
 The isolated end-to-end target creates only test users and repositories through GORM,
 starts a real API, pushes and pulls a small image through Docker, and removes its
@@ -85,6 +95,9 @@ metadata assertions cover repository-scoped identity, Manifest/Index descriptors
 state, denied-push non-persistence, private `404` non-disclosure, and authenticated
 public access. The target uses dedicated ports and a separate Compose project, and
 never reads or writes the user's Docker credential store or macOS Keychain.
+It also verifies correlated token/notification logs, policy action counters, a
+structured challenge log, Distribution metrics and queue visibility, and the absence
+of tested credentials and Bearer tokens from gateway and API logs.
 
 ## Stop and local data
 
@@ -111,6 +124,9 @@ Registry 3, and Nginx 1.29 on Apple Silicon. The automated matrix used isolated 
 port `55001` and `alpine:3.22`; authorization, cross-repository and cross-action scope
 isolation, runtime token expiry and signature rejection, event-driven Artifact/Tag,
 and Artifact API checks passed.
+The same isolated runtime now also passes challenge/token/notification telemetry,
+Distribution queue visibility, bounded-metric, and secret-safe log assertions; the
+Distribution debug listener used host port `55002`.
 
 On macOS, `ControlCenter` may reserve port `5000`; use a consistent alternate
 `HUBCR_REGISTRY_PORT` for `infra-up`, `dev-api`, and `infra-smoke`. This is a host-port

@@ -22,6 +22,7 @@ import (
 	"hubcr.io/hubcr/internal/modules/registry"
 	"hubcr.io/hubcr/internal/modules/repositories"
 	"hubcr.io/hubcr/internal/platform/httpapi"
+	"hubcr.io/hubcr/internal/platform/observability"
 	"hubcr.io/hubcr/internal/platform/postgres"
 	"hubcr.io/hubcr/internal/platform/postgres/authstore"
 	"hubcr.io/hubcr/internal/platform/postgres/organizationstore"
@@ -152,7 +153,11 @@ func TestRegistryTokenFlowWithGORMStoresAndPostgres(t *testing.T) {
 	if err != nil {
 		t.Fatalf("registry.NewService() error = %v", err)
 	}
-	tokenHandler, err := New(tokenService, slog.New(slog.NewJSONHandler(io.Discard, nil)))
+	tokenHandler, err := New(
+		tokenService,
+		slog.New(slog.NewJSONHandler(io.Discard, nil)),
+		observability.NewRegistryMetrics(),
+	)
 	if err != nil {
 		t.Fatalf("registryhandler.New() error = %v", err)
 	}

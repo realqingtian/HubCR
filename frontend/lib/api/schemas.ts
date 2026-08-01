@@ -2,7 +2,7 @@ import { z } from "zod";
 
 const idSchema = z.string().uuid();
 const timestampSchema = z.iso.datetime({ offset: true });
-const namespaceNameSchema = z
+export const namespaceNameSchema = z
   .string()
   .min(1)
   .max(64)

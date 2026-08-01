@@ -69,7 +69,8 @@ Observation 可以移动当前 Tag；更旧或时间相同的事件不能把它�
 | Media Type 错误或 Body 过大 | `415` / `413` | 永久请求错误 |
 
 Distribution 使用有界本地 Endpoint Queue、两秒 Timeout、五次失败阈值和一秒 Backoff。
-运维指标与更完整的事件可观测性属于 M2-09。
+M2-09 现已按 [Registry 运维可观测性](registry-observability.zh-CN.md)暴露队列与重试
+状态，以及可关联的控制面 Counter 和日志。
 
 ## 验收证据
 

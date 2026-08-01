@@ -12,6 +12,7 @@ import (
 
 	"hubcr.io/hubcr/internal/modules/registry"
 	"hubcr.io/hubcr/internal/platform/httpapi"
+	"hubcr.io/hubcr/internal/platform/observability"
 )
 
 const (
@@ -26,8 +27,9 @@ type TokenIssuer interface {
 }
 
 type Handler struct {
-	issuer TokenIssuer
-	logger *slog.Logger
+	issuer  TokenIssuer
+	logger  *slog.Logger
+	metrics *observability.RegistryMetrics
 }
 
 type tokenResponse struct {
@@ -46,11 +48,15 @@ type errorDetail struct {
 	Message string `json:"message"`
 }
 
-func New(issuer TokenIssuer, logger *slog.Logger) (*Handler, error) {
-	if issuer == nil || logger == nil {
+func New(
+	issuer TokenIssuer,
+	logger *slog.Logger,
+	metrics *observability.RegistryMetrics,
+) (*Handler, error) {
+	if issuer == nil || logger == nil || metrics == nil {
 		return nil, errors.New("Registry token handler dependencies must be configured")
 	}
-	return &Handler{issuer: issuer, logger: logger}, nil
+	return &Handler{issuer: issuer, logger: logger, metrics: metrics}, nil
 }
 
 func RegisterRoutes(router *httpapi.Router, handler *Handler) {
@@ -83,13 +89,19 @@ func (h *Handler) ServeHTTP(w http.ResponseWriter, request *http.Request) {
 		h.writeIssueError(w, request, err)
 		return
 	}
+	requestedActions, grantedActions := tokenActionCounts(issueRequest.RawScopes, result.Access)
+	deniedActions := subtractActionCounts(requestedActions, grantedActions)
+	h.metrics.ObserveToken(observability.TokenIssued, grantedActions, deniedActions)
 	h.logger.InfoContext(
 		request.Context(),
 		"Registry token issued",
 		"request_id", httpapi.RequestID(request.Context()),
+		"outcome", "issued",
 		"anonymous", result.Subject.Anonymous(),
-		"subject_id", result.Subject.ID,
-		"access", result.Access,
+		"requested_scope_count", len(issueRequest.RawScopes),
+		"requested_action_count", actionCount(requestedActions),
+		"granted_action_count", actionCount(grantedActions),
+		"denied_action_count", actionCount(deniedActions),
 		"kid", result.KeyID,
 		"status", http.StatusOK,
 	)
@@ -181,10 +193,13 @@ func (h *Handler) writeError(
 	status int,
 	code, message string,
 ) {
+	outcome, outcomeName := tokenFailureOutcome(status)
+	h.metrics.ObserveToken(outcome, observability.ActionCounts{}, observability.ActionCounts{})
 	h.logger.WarnContext(
 		request.Context(),
 		"Registry token request failed",
 		"request_id", httpapi.RequestID(request.Context()),
+		"outcome", outcomeName,
 		"error_class", code,
 		"status", status,
 	)
@@ -198,4 +213,70 @@ func setProtocolHeaders(w http.ResponseWriter) {
 	w.Header().Set("Content-Type", "application/json")
 	w.Header().Set("Cache-Control", "no-store")
 	w.Header().Set("Pragma", "no-cache")
+}
+
+func tokenActionCounts(
+	rawScopes []string,
+	access []registry.Access,
+) (observability.ActionCounts, observability.ActionCounts) {
+	requested := observability.ActionCounts{}
+	scopes, err := registry.ParseScopes(rawScopes)
+	if err == nil {
+		for _, scope := range scopes {
+			addActions(&requested, scope.Actions)
+		}
+	}
+	granted := observability.ActionCounts{}
+	for _, entry := range access {
+		addActions(&granted, entry.Actions)
+	}
+	return requested, granted
+}
+
+func addActions(counts *observability.ActionCounts, actions []registry.Action) {
+	for _, action := range actions {
+		switch action {
+		case registry.ActionPull:
+			counts.Pull++
+		case registry.ActionPush:
+			counts.Push++
+		case registry.ActionDelete:
+			counts.Delete++
+		}
+	}
+}
+
+func subtractActionCounts(
+	requested observability.ActionCounts,
+	granted observability.ActionCounts,
+) observability.ActionCounts {
+	return observability.ActionCounts{
+		Pull:   subtractCount(requested.Pull, granted.Pull),
+		Push:   subtractCount(requested.Push, granted.Push),
+		Delete: subtractCount(requested.Delete, granted.Delete),
+	}
+}
+
+func subtractCount(requested, granted uint64) uint64 {
+	if granted >= requested {
+		return 0
+	}
+	return requested - granted
+}
+
+func actionCount(counts observability.ActionCounts) uint64 {
+	return counts.Pull + counts.Push + counts.Delete
+}
+
+func tokenFailureOutcome(status int) (observability.TokenOutcome, string) {
+	switch status {
+	case http.StatusBadRequest, http.StatusMethodNotAllowed:
+		return observability.TokenInvalid, "invalid"
+	case http.StatusUnauthorized:
+		return observability.TokenUnauthorized, "unauthorized"
+	case http.StatusServiceUnavailable:
+		return observability.TokenUnavailable, "unavailable"
+	default:
+		return observability.TokenError, "error"
+	}
 }

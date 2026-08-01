@@ -160,6 +160,13 @@ export async function listRepositories(namespace: string, input?: PageInput): Pr
   );
 }
 
+export async function getRepository(namespace: string, name: string): Promise<Repository> {
+  return request(
+    `/api/v1/namespaces/${encodeURIComponent(namespace)}/repositories/${encodeURIComponent(name)}`,
+    repositorySchema,
+  );
+}
+
 export async function createRepository(
   namespace: string,
   name: string,

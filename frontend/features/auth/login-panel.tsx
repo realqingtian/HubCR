@@ -1,8 +1,8 @@
 "use client";
 
 import { useMutation } from "@tanstack/react-query";
+import { friendlyError } from "@/features/shared/feedback";
 import { login, type LoginResponse } from "@/lib/api/client";
-import { friendlyError } from "./feedback";
 
 export function LoginPanel({ onSuccess }: Readonly<{ onSuccess: (result: LoginResponse) => void }>) {
   const mutation = useMutation({ mutationFn: ({ username, password }: { username: string; password: string }) => login(username, password), onSuccess });

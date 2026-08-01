@@ -89,12 +89,12 @@ As of 2026-08-01, the repository contains:
 
 | Area | Implemented now | Not implemented yet |
 | --- | --- | --- |
-| Go API | Process composition, PostgreSQL lifecycle, health, local session, organization/member, policy-protected repository and Artifact/Tag APIs, Registry token issuance, and authenticated Distribution push-event ingestion | Account bootstrap/invitation redemption |
+| Go API | Process composition, PostgreSQL lifecycle, health, local session, organization/member, policy-protected repository and Artifact/Tag APIs, Registry token issuance, authenticated Distribution push-event ingestion, and Registry operational metrics/logs | Account bootstrap/invitation redemption |
 | Go worker | Configured polling loop and graceful shutdown | PostgreSQL job claiming and security jobs |
-| Web | Minimal authenticated workspace with runtime-validated auth, organization/member, and repository clients and flows | Account bootstrap/invitation redemption, public discovery, artifact/tag, and Registry workflows |
+| Web | Authenticated shell with overview, namespace and repository-detail routes plus runtime-validated auth, organization/member, and repository-management clients and flows | Account bootstrap/invitation redemption, public discovery, artifact/tag discovery, and Registry quick-start workflows |
 | OCI data plane | Token-protected local Distribution gateway backed by MinIO with authorized Docker/OCI checks and push-event delivery to the control plane | Delete-event reconciliation and approved lifecycle behavior |
-| Infrastructure | Compose definitions for PostgreSQL, Redis, MinIO and Distribution; control-plane PostgreSQL connection and versioned GORM migrations through artifact/tag metadata | Worker/Redis connections, job schema migrations and production deployment |
-| Quality | Go and web unit checks, isolated PostgreSQL persistence/HTTP/cross-tenant tests, deterministic Playwright state tests, a real M1 full-stack browser journey, the complete M2 Docker/OCI authorization matrix, event-driven metadata, and Artifact API checks, plus repository-wide `make check` | M2 operational telemetry and later security end-to-end suites |
+| Infrastructure | Compose definitions for PostgreSQL, Redis, MinIO and Distribution, including loopback-only Distribution metrics/queue visibility; control-plane PostgreSQL connection and versioned GORM migrations through artifact/tag metadata | Worker/Redis connections, job schema migrations and production deployment |
+| Quality | Go and web unit checks, isolated PostgreSQL persistence/HTTP/cross-tenant tests, deterministic Playwright state tests, a real M1 full-stack browser journey, the complete M2 Docker/OCI authorization matrix, event-driven metadata, Artifact APIs, operational telemetry, and repository-wide `make check` | Later security end-to-end suites |
 
 The scaffold is not production-ready and must not be described as a functioning
 multi-user registry until the MVP exit criteria in section 9 pass.

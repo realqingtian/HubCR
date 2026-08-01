@@ -27,6 +27,7 @@ Go 控制面 --> PostgreSQL
 - `backend/internal/modules/artifacts`：Artifact/Tag 校验与持久化契约
 - `backend/internal/platform/httpapi/artifacthandler`：经过授权的 Artifact/Tag 读取 Adapter
 - `backend/internal/platform/httpapi/registryeventhandler`：经过认证的内部事件 Adapter
+- `backend/internal/platform/observability`：有界进程指标及内部 Exposition Adapter
 - `backend/internal/platform/postgres/artifactstore`：GORM/PostgreSQL Artifact Adapter
 - `backend/migrations`：PostgreSQL 数据库迁移
 - `frontend/app`：Next.js 路由与布局
@@ -34,6 +35,11 @@ Go 控制面 --> PostgreSQL
 - `frontend/lib`：共享的类型化 API 客户端与工具
 - `frontend/providers`：应用级客户端 Provider
 - `deployments/compose`：本地基础设施
+
+当前 Web 路由边界使用共享登录态 Shell 包裹 `/`、`/namespaces/[namespace]` 与
+`/namespaces/[namespace]/repositories/[repository]`。Route 文件校验动态 OCI Name
+Component，并把 API 驱动的展示委托给 `namespaces` 与 `repositories` Feature；Route
+不拥有授权决策。
 
 ## 模块规则
 
@@ -45,6 +51,8 @@ Go 控制面 --> PostgreSQL
    事件负责协调这些元数据；经过授权的读取 API 在不接管 OCI 传输的前提下对外提供它们。
 6. HubCR 负责用户、命名空间、可见性、授权和安全策略。
 7. 扫描与签名结果必须绑定不可变的 Artifact Digest。
+8. Registry 运维信号遵循相同所有权边界：Gateway 与 Distribution 观测 `/v2/`
+   Challenge 和投递队列；Go 控制面观测 Token 决策与通知协调。
 
 ## 延后确认的产品决策
 

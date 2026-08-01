@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import {
   healthResponseSchema,
+  namespaceNameSchema,
   repositorySchema,
   userSchema,
 } from "./schemas";
@@ -16,6 +17,12 @@ describe("healthResponseSchema", () => {
 });
 
 describe("control-plane product schemas", () => {
+
+  it("validates route path components with the canonical OCI name rule", () => {
+    expect(namespaceNameSchema.parse("platform-team")).toBe("platform-team");
+    expect(() => namespaceNameSchema.parse("Platform Team")).toThrow();
+    expect(() => namespaceNameSchema.parse("nested/repository")).toThrow();
+  });
   it("requires an explicit personal namespace on authenticated users", () => {
     const user = {
       id: "11111111-1111-4111-8111-111111111111",

@@ -75,8 +75,9 @@ Responses intentionally drive Distribution retry behavior:
 | Wrong media type / oversized body | `415` / `413` | Permanent request failure |
 
 Distribution uses a bounded local endpoint queue with a two-second timeout,
-five-failure threshold, and one-second backoff. Operational metrics and broader event
-observability remain M2-09.
+five-failure threshold, and one-second backoff. M2-09 now exposes the queue and retry
+state together with correlated control-plane counters and logs as documented in
+[Registry operational observability](registry-observability.md).
 
 ## Acceptance evidence
 

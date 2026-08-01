@@ -2,6 +2,7 @@ version: 0.1
 
 log:
   level: info
+  formatter: json
   fields:
     service: hubcr-registry
 
@@ -40,6 +41,11 @@ notifications:
 
 http:
   addr: :5000
+  debug:
+    addr: :5001
+    prometheus:
+      enabled: true
+      path: /metrics
   headers:
     X-Content-Type-Options: [nosniff]
 

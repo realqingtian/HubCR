@@ -1,8 +1,9 @@
 "use client";
 
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import Link from "next/link";
 import { createRepository, listRepositories, updateRepository, type RepositoryVisibility } from "@/lib/api/client";
-import { friendlyError, PanelMessage } from "./feedback";
+import { friendlyError, PanelMessage } from "@/features/shared/feedback";
 
 export function RepositoryPanel({ namespace, title }: Readonly<{ namespace: string; title: string }>) {
   const queryClient = useQueryClient();
@@ -71,15 +72,20 @@ export function RepositoryPanel({ namespace, title }: Readonly<{ namespace: stri
             <article className="flex flex-col gap-4 rounded-xl border border-slate-200 p-4 sm:flex-row sm:items-center sm:justify-between" key={repository.id}>
               <div className="min-w-0">
                 <div className="flex flex-wrap items-center gap-2">
-                  <h4 className="truncate font-mono text-sm font-semibold text-slate-950">{namespace}/{repository.name}</h4>
+                  <h4 className="truncate font-mono text-sm font-semibold text-slate-950">
+                    <Link className="rounded hover:text-sky-700 focus:outline-none focus:ring-4 focus:ring-sky-100" href={`/namespaces/${namespace}/repositories/${repository.name}`}>{namespace}/{repository.name}</Link>
+                  </h4>
                   <span className={repository.visibility === "PUBLIC" ? "rounded-full bg-emerald-50 px-2.5 py-1 text-xs font-semibold text-emerald-700" : "rounded-full bg-amber-50 px-2.5 py-1 text-xs font-semibold text-amber-800"}>{repository.visibility}</span>
                 </div>
                 <p className="mt-1 text-sm text-slate-600">{repository.description || "No description"}</p>
                 <p className="mt-2 text-xs text-slate-400">Visibility updated {new Date(repository.visibility_updated_at).toLocaleString()}</p>
               </div>
-              <button className="shrink-0 rounded-lg border border-slate-300 px-3 py-2 text-sm font-medium text-slate-700 hover:bg-slate-50 focus:outline-none focus:ring-4 focus:ring-slate-100 disabled:opacity-60" disabled={visibilityMutation.isPending} onClick={() => visibilityMutation.mutate({ name: repository.name, visibility: nextVisibility })} type="button">
-                {changing ? "Updating…" : `Make ${nextVisibility.toLowerCase()}`}
-              </button>
+              <div className="flex shrink-0 flex-wrap gap-2">
+                <Link className="rounded-lg border border-slate-300 px-3 py-2 text-sm font-medium text-slate-700 hover:bg-slate-50 focus:outline-none focus:ring-4 focus:ring-slate-100" href={`/namespaces/${namespace}/repositories/${repository.name}`}>View</Link>
+                <button className="rounded-lg border border-slate-300 px-3 py-2 text-sm font-medium text-slate-700 hover:bg-slate-50 focus:outline-none focus:ring-4 focus:ring-slate-100 disabled:opacity-60" disabled={visibilityMutation.isPending} onClick={() => visibilityMutation.mutate({ name: repository.name, visibility: nextVisibility })} type="button">
+                  {changing ? "Updating…" : `Make ${nextVisibility.toLowerCase()}`}
+                </button>
+              </div>
             </article>
           );
         })}

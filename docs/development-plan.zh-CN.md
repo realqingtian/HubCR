@@ -4,7 +4,7 @@
 
 - 状态：持续维护中的有效计划
 - 计划开始：2026-08-01
-- 当前阶段：M2-01 至 M2-08 已完成；下一项为 M2-09
+- 当前阶段：M2-01 至 M2-09 及 M3-01 已完成；M2 退出审计仍缺必须旅程 7，下一项为 M3-03
 - 需求基线：[HubCR 产品需求](requirements.zh-CN.md)
 
 本计划将产品基线转化为有顺序、可测试的工作项。它是一份交付管理文档：完成工作后
@@ -41,14 +41,15 @@
 | 仓库 | `main` 跟踪 `origin/main`，已有脚手架与双语文档 | Git 检查 |
 | Go 控制面 | 已有存活/就绪接口、配置、HTTP Server 和优雅退出 | 单元测试及此前运行冒烟测试 |
 | Worker | 已有轮询与优雅退出脚手架 | 代码与仓库检查 |
-| Web | 已有 Next.js 脚手架、TanStack Query Provider 和 Zod 健康检查 Schema | 单元测试与生产构建 |
+| Web | 登录态 Overview、Namespace 与 Repository Detail 路由使用 TanStack Query 和经 Zod 校验的 API 契约 | 单元测试、生产构建、Mock 路由旅程及真实 M1 浏览器回归 |
 | Docker 宿主 | Docker Engine `29.6.2`、Compose `v5.3.1`、`linux/arm64` Server | `docker --version`、`docker compose version`、`docker info` |
 | Compose 定义 | PostgreSQL 17、Redis 7、MinIO、Distribution 3 配置可成功解析 | `docker compose ... config --quiet` |
 | Compose 运行 | 完整 Stack 已在 Apple Silicon 通过冒烟测试；macOS 占用 `5000` 时可覆盖 Registry 宿主端口 | [Compose 冒烟证据](../deployments/compose/README.zh-CN.md#已验证环境) |
 | 应用集成 | API 已持有 PostgreSQL 连接池并提供依赖感知就绪检查；Worker 与 Redis 连接仍待实现 | 单元测试、实时依赖中断/恢复及优雅退出检查 |
-| Registry 集成 | Scoped Token 签发、受 Token 保护的本地 Gateway、Push 事件协调及经过授权的 Artifact/Tag 读取 API 已完成 | Go/PostgreSQL 集成测试与 Docker/OCI/API 验收测试 |
+| Registry 集成 | Scoped Token 签发、受 Token 保护的本地 Gateway、Push 事件协调、经过授权的 Artifact/Tag 读取 API 及运维遥测已完成 | Go/PostgreSQL 集成测试与 Docker/OCI/API/遥测验收测试 |
 
-项目已完成里程碑 0、里程碑 1 以及 M2-01 至 M2-08。下一步为 M2-09 运维日志与指标。
+项目已完成里程碑 0、里程碑 1 及全部 M2 工作包。M2 退出审计发现必须旅程 7 仍未完成：
+Artifact/Tag 数据已有 API，但尚未进入 Web UI。M3-01 已完成，下一项可执行工作包为 M3-03。
 
 ## 3. 决策门
 
@@ -242,7 +243,7 @@ Bootstrap 入口呈现；管理员邀请 API 不属于这三个 M1 退出流程�
 | M2-06 | `DONE` | [经过认证的 Distribution Push 事件协调](distribution-event-reconciliation.zh-CN.md)，支持幂等与重试 | M2-05 | FR-ART-001、FR-ART-004 |
 | M2-07 | `DONE` | [Repository Artifact/Tag 列表与详情 API](api.zh-CN.md) | M2-05、M2-06 | FR-ART-003、FR-ART-005 |
 | M2-08 | `DONE` | 覆盖公开/私有 Pull、Push、过期和 Scope 隔离的 Docker/OCI 端到端套件 | M2-04、M2-06 | FR-REG-003–005 |
-| M2-09 | `READY` | Challenge、Token 决策和事件处理的运维日志与指标 | M2-03、M2-06 | FR-REG-006、FR-OPS-002 |
+| M2-09 | `DONE` | Challenge、Token 决策与事件处理的[运维日志和指标](registry-observability.zh-CN.md) | M2-03、M2-06 | FR-REG-006、FR-OPS-002 |
 
 ### M2 安全验收矩阵
 
@@ -310,12 +311,26 @@ Pull-only Token 用于 Push 时拒绝，以及在运行时拒绝过期和签名�
 不产生持久化、授权 API 读取及日志不泄露 Secret 证据。Registry 聚焦测试、文档检查及
 仓库级 `make check` 门禁也均通过。
 
+M2-09 在 2026-08-01 的证据包括：为 Token Outcome、Policy Action 交集、通知结果、
+Processed/Ignored Event 和协调失败 Class 提供固定 Label 的进程内 Prometheus Counter。
+Token/Event 日志携带 Request ID 与有界决策字段，不包含 Subject、Repository、Payload、
+凭据或 Token。Gateway 以不泄露 Secret 的 JSON 记录 `/v2/` `401` Challenge，Distribution
+只在 Loopback Debug 端口暴露通知指标和 Queue 变量。聚焦 Go 测试及
+`make test-m2-registry-e2e` 证明信号契约、真实成功/拒绝活动、Queue 可见性、请求关联与
+Secret 隔离。运行时套件还修正签名无效检查：改为修改 JWT Signature Segment 的首字节，
+避免只改变未使用的 Base64URL 尾部 Bit。
+
 ### M2 退出标准
 
 - 必需用户旅程 4–8 可使用 Apple Silicon 上受支持的 Docker 客户端完成。
 - 镜像字节由 Distribution 而不是 Go API 传输。
 - Token Claim 仅包含策略允许的请求操作子集。
 - 重复 Distribution 事件只产生一份正确 Artifact/Tag 状态，且不会丢失合法 Tag 移动。
+
+2026-08-01 的 M2 退出审计通过真实 Docker/OCI 套件和聚焦集成测试证明旅程 4–6、8 及
+其余技术标准。必须旅程 7 尚未完成：已 Push Tag 与不可变 Digest 已通过授权 API 暴露，
+但当前 Web 应用没有 Artifact/Tag View。因此全部 M2 工作包虽已完成，但尚不宣称里程碑
+退出。M3-01 已补齐如实导航缺口；M3-03 仍需补齐 Artifact 发现。
 
 ## 8. 里程碑 3——Registry MVP 候选版本
 
@@ -324,14 +339,22 @@ Pull-only Token 用于 Push 时拒绝，以及在运行时拒绝过期和签名�
 
 | ID | 状态 | 交付结果 | 依赖 |
 | --- | --- | --- | --- |
-| M3-01 | `PLANNED` | Web 导航、认证状态、命名空间与仓库页面 | M1-09、M2-07 |
-| M3-02 | `PLANNED` | 根据真实可见性与用户能力生成仓库快速开始说明 | M2-03、M3-01 |
-| M3-03 | `PLANNED` | Tag/Artifact 列表与 Digest 详情，如实展示不可用与错误状态 | M2-07、M3-01 |
+| M3-01 | `DONE` | Web 导航、认证状态、命名空间与仓库页面 | M1-09、M2-07 |
+| M3-02 | `READY` | 根据真实可见性与用户能力生成仓库快速开始说明 | M2-03、M3-01 |
+| M3-03 | `READY` | Tag/Artifact 列表与 Digest 详情，如实展示不可用与错误状态 | M2-07、M3-01 |
 | M3-04 | `PLANNED` | 登录、组织、仓库与 Artifact 发现的 Playwright 流程 | M3-01–03 |
 | M3-05 | `PLANNED` | 在 CI 或文档化集成环境运行 OCI 验收 | M2-08 |
 | M3-06 | `PLANNED` | 会话、授权和 Token 交换的威胁模型审查与整改 | M1、M2 |
 | M3-07 | `PLANNED` | 受支持 MVP 部署的备份/恢复和迁移演练 | G-04 子集、M2 |
 | M3-08 | `PLANNED` | 双语运维、API、用户文档与发布限制 | M3-01–07 |
+
+M3-01 在 2026-08-01 的证据包括共享登录态 Shell，以及用于 Namespace Discovery 和
+Repository Detail 的类型化动态路由。Route Parameter 复用规范 OCI Name Schema；
+Client Response 继续由 Zod 校验并交给 TanStack Query 管理。Breadcrumb、键盘 Focus、
+移动端换行、Loading、Empty、Unavailable、Retry、无效 Route 与 Private `404` 不披露
+状态均明确展示。Repository Detail 如实把 Artifact/Tag Discovery 标为不可用，不推断
+Scan、Signature 或 Trust 数据。9 个 Vitest、5 个桌面/390px 宽度 Mock Chromium 旅程、
+Next.js 生产构建及真实 PostgreSQL/Go/Next.js M1 浏览器回归均通过。
 
 只有[需求第 9 节](requirements.zh-CN.md#9-registry-mvp-验收标准)的所有 Registry MVP
 验收项都有证据时，M3 才能退出。UI 中的安全卡片必须不存在或明确标为不可用，绝不能
@@ -376,12 +399,12 @@ Pull-only Token 用于 Push 时拒绝，以及在运行时拒绝过期和签名�
 
 根据当前仓库状态，推荐按以下顺序执行：
 
-1. **实现 M2-09：**为 Challenge、Token 决策、通知 Queue 与协调故障增加运维指标和
-   结构化日志。
-2. **复核 M2 退出条件：**验证安全矩阵每一行，再根据当前证据重新规划 M3，且不提前
-   声称 Web Artifact 用户旅程已完成。
-3. **准备 M3-01：**M2 退出复核后，根据当前 API 能力定义最小且如实的 Web 导航与
-   Repository 页面增量。
+1. **实现 M3-03：**提供 Tag/Artifact 列表及 Digest 详情，区分 Loading、Empty、Denial、
+   Unavailable 与 Failed 状态，补齐必须旅程 7。
+2. **实现 M3-02：**根据真实 Visibility 与调用方 Capability 生成 Repository Quick-start，
+   不虚构尚不可用的凭据。
+3. **实现 M3-04：**M3-02 与 M3-03 完成后，把 Playwright 从 Repository 导航扩展到真实
+   Artifact Discovery。
 
 Commit 应保持足够小，使一个工作包及其测试可一起审查。
 

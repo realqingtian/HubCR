@@ -17,6 +17,7 @@ import (
 	"hubcr.io/hubcr/internal/modules/authorization"
 	"hubcr.io/hubcr/internal/modules/registry"
 	"hubcr.io/hubcr/internal/modules/repositories"
+	"hubcr.io/hubcr/internal/platform/observability"
 	"hubcr.io/hubcr/internal/platform/postgres"
 	"hubcr.io/hubcr/internal/platform/postgres/artifactstore"
 	"hubcr.io/hubcr/internal/platform/postgres/authstore"
@@ -62,6 +63,7 @@ func TestRegistryEventHandlerReconcilesRealPostgresState(t *testing.T) {
 		notificationService,
 		[]byte(registryEventTestToken),
 		slog.New(slog.NewTextHandler(io.Discard, nil)),
+		observability.NewRegistryMetrics(),
 	)
 	if err != nil {
 		t.Fatalf("New() error = %v", err)

@@ -3,7 +3,7 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useState } from "react";
 import { addMember, createOrganization, listMembers, listOrganizations, type OrganizationRole } from "@/lib/api/client";
-import { friendlyError, PanelMessage } from "./feedback";
+import { friendlyError, PanelMessage } from "@/features/shared/feedback";
 import { RepositoryPanel } from "./repository-panel";
 
 export function OrganizationWorkspace() {
@@ -27,7 +27,7 @@ export function OrganizationWorkspace() {
   }
 
   return (
-    <section className="mt-8 rounded-3xl border border-slate-200 bg-white p-5 shadow-sm sm:p-7">
+    <section className="mt-8 scroll-mt-6 rounded-3xl border border-slate-200 bg-white p-5 shadow-sm sm:p-7" id="organizations">
       <div className="flex flex-wrap items-start justify-between gap-4">
         <div>
           <p className="text-xs font-semibold uppercase tracking-[0.18em] text-sky-700">Organization ownership</p>

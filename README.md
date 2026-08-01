@@ -16,8 +16,9 @@ reimplemented.
 > workspace, short-lived Registry token issuance, and a token-protected local
 > Distribution gateway. Digest-keyed artifact, manifest/index, and current-tag
 > persistence is connected to authenticated Distribution push events and exposed
-> through policy-protected read APIs. Account bootstrap/invitation redemption,
-> Registry operational metrics, web artifact workflows, and supply-chain security
+> through policy-protected read APIs. Registry challenge, token-decision, notification,
+> and reconciliation telemetry is available for local operations. Account
+> bootstrap/invitation redemption, web artifact workflows, and supply-chain security
 > features are not implemented yet. Do not use the current version as a production
 > registry.
 
@@ -56,12 +57,13 @@ docker push hubcr.io/my-organization/backend:v1.0.0
 | --- | --- |
 | Go control plane | Runnable service with PostgreSQL lifecycle, dependency-aware health, local sessions, organizations, repositories, Artifact/Tag read APIs, and centralized authorization |
 | Asynchronous worker | Runnable polling scaffold; job persistence is not connected |
-| Web application | Minimal authenticated Next.js workspace with typed, runtime-validated auth, organization/member, and repository flows |
+| Web application | Authenticated Next.js shell with overview, namespace and repository-detail routes plus typed, runtime-validated auth, organization/member and repository-management flows; Artifact/Tag web discovery remains pending |
 | OCI data plane | Local gateway routes `/v2/` to token-protected CNCF Distribution backed by MinIO and `/token` to the Go control plane |
 | PostgreSQL and Redis | Local Compose services defined; the control plane connects to PostgreSQL, while Redis is not connected |
 | Users, organizations, and repositories | Identity/session APIs, personal namespaces, organization/member APIs, centralized capability policy, policy-protected repository APIs, and the corresponding minimal web workspace exist; account bootstrap/invitation redemption remains pending |
 | Registry token service | Feature-gated RS256 token issuance with exact repository/action scopes, JWKS trust and rotation-ready verification |
 | Artifact metadata | Authenticated Distribution push events reconcile repository-scoped immutable digests, manifest/index descriptors, and mutable current tags through GORM; authorized list/detail APIs are available |
+| Registry observability | Secret-safe structured challenge/token/notification logs, bounded control-plane counters, and localhost-only Distribution metrics/queue visibility |
 | Trivy and Cosign | Worker boundaries reserved; integrations are pending |
 
 ## Architecture
@@ -285,6 +287,7 @@ Run `make check` before requesting review or committing a completed change.
 | `MINIO_ROOT_USER` | `hubcr` | Local MinIO administrator |
 | `MINIO_ROOT_PASSWORD` | development only | Local MinIO password |
 | `HUBCR_REGISTRY_PORT` | `5000` | Local host port published for the OCI gateway |
+| `HUBCR_REGISTRY_DEBUG_PORT` | `5002` | Loopback-only Distribution debug/Prometheus host port |
 | `HUBCR_POSTGRES_PORT` | `5432` | Local PostgreSQL host port |
 | `HUBCR_REDIS_PORT` | `6379` | Local Redis host port |
 | `HUBCR_MINIO_PORT` | `9000` | Local MinIO API host port |
@@ -322,6 +325,7 @@ must link to and remain synchronized with its Simplified Chinese counterpart.
 | Registry authentication protocol | [Registry auth](docs/registry-authentication.md) | [Registry 认证](docs/registry-authentication.zh-CN.md) |
 | Artifact metadata persistence | [Artifact persistence](docs/artifact-metadata-persistence.md) | [Artifact 持久化](docs/artifact-metadata-persistence.zh-CN.md) |
 | Distribution event reconciliation | [Event reconciliation](docs/distribution-event-reconciliation.md) | [事件协调](docs/distribution-event-reconciliation.zh-CN.md) |
+| Registry operational observability | [Registry observability](docs/registry-observability.md) | [Registry 可观测性](docs/registry-observability.zh-CN.md) |
 | AI instruction hierarchy | [Instructions](AGENTS.md) | [AI 指令](AGENTS.zh-CN.md) |
 | Local infrastructure | [Compose](deployments/compose/README.md) | [本地基础设施](deployments/compose/README.zh-CN.md) |
 | Web application | [Web](frontend/README.md) | [Web 应用](frontend/README.zh-CN.md) |

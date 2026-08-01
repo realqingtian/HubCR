@@ -14,6 +14,7 @@ import (
 
 	"hubcr.io/hubcr/internal/modules/registry"
 	"hubcr.io/hubcr/internal/platform/httpapi"
+	"hubcr.io/hubcr/internal/platform/observability"
 )
 
 const (
@@ -31,14 +32,20 @@ type Handler struct {
 	processor   NotificationProcessor
 	tokenDigest [sha256.Size]byte
 	logger      *slog.Logger
+	metrics     *observability.RegistryMetrics
 }
 
-func New(processor NotificationProcessor, token []byte, logger *slog.Logger) (*Handler, error) {
-	if processor == nil || logger == nil || !validEventToken(token) {
+func New(
+	processor NotificationProcessor,
+	token []byte,
+	logger *slog.Logger,
+	metrics *observability.RegistryMetrics,
+) (*Handler, error) {
+	if processor == nil || logger == nil || metrics == nil || !validEventToken(token) {
 		return nil, errors.New("Registry event handler dependencies must be configured")
 	}
 	return &Handler{
-		processor: processor, tokenDigest: sha256.Sum256(token), logger: logger,
+		processor: processor, tokenDigest: sha256.Sum256(token), logger: logger, metrics: metrics,
 	}, nil
 }
 
@@ -91,10 +98,17 @@ func (h *Handler) ServeHTTP(w http.ResponseWriter, request *http.Request) {
 		h.writeProcessFailure(w, request, err)
 		return
 	}
+	h.metrics.ObserveNotification(
+		observability.NotificationAccepted,
+		uint64(result.Processed),
+		uint64(result.Ignored),
+	)
 	h.logger.InfoContext(
 		request.Context(),
 		"Registry notification accepted",
 		"request_id", httpapi.RequestID(request.Context()),
+		"outcome", "accepted",
+		"event_count", len(envelope.Events),
 		"processed", result.Processed,
 		"ignored", result.Ignored,
 		"status", http.StatusAccepted,
@@ -127,12 +141,16 @@ func (h *Handler) writeDecodeFailure(w http.ResponseWriter, request *http.Reques
 func (h *Handler) writeProcessFailure(w http.ResponseWriter, request *http.Request, err error) {
 	switch {
 	case errors.Is(err, registry.ErrInvalidNotification):
+		h.metrics.ObserveReconciliationFailure(observability.ReconciliationInvalid)
 		h.writeFailure(w, request, http.StatusBadRequest, "INVALID")
 	case errors.Is(err, registry.ErrNotificationConflict):
+		h.metrics.ObserveReconciliationFailure(observability.ReconciliationConflict)
 		h.writeFailure(w, request, http.StatusConflict, "CONFLICT")
 	case errors.Is(err, registry.ErrNotificationUnavailable):
+		h.metrics.ObserveReconciliationFailure(observability.ReconciliationUnavailable)
 		h.writeFailure(w, request, http.StatusServiceUnavailable, "UNAVAILABLE")
 	default:
+		h.metrics.ObserveReconciliationFailure(observability.ReconciliationUnknown)
 		h.writeFailure(w, request, http.StatusInternalServerError, "UNKNOWN")
 	}
 }
@@ -143,10 +161,13 @@ func (h *Handler) writeFailure(
 	status int,
 	errorClass string,
 ) {
+	outcome, outcomeName := notificationFailureOutcome(status)
+	h.metrics.ObserveNotification(outcome, 0, 0)
 	h.logger.WarnContext(
 		request.Context(),
 		"Registry notification rejected",
 		"request_id", httpapi.RequestID(request.Context()),
+		"outcome", outcomeName,
 		"error_class", errorClass,
 		"status", status,
 	)
@@ -169,4 +190,20 @@ func validEventToken(token []byte) bool {
 		}
 	}
 	return true
+}
+
+func notificationFailureOutcome(status int) (observability.NotificationOutcome, string) {
+	switch status {
+	case http.StatusUnauthorized:
+		return observability.NotificationUnauthorized, "unauthorized"
+	case http.StatusBadRequest, http.StatusMethodNotAllowed,
+		http.StatusUnsupportedMediaType, http.StatusRequestEntityTooLarge:
+		return observability.NotificationInvalid, "invalid"
+	case http.StatusConflict:
+		return observability.NotificationConflict, "conflict"
+	case http.StatusServiceUnavailable:
+		return observability.NotificationUnavailable, "unavailable"
+	default:
+		return observability.NotificationError, "error"
+	}
 }

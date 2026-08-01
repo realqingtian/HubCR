@@ -8,6 +8,7 @@ redis_port=${HUBCR_M2_E2E_REDIS_PORT:-56380}
 minio_port=${HUBCR_M2_E2E_MINIO_PORT:-59000}
 minio_console_port=${HUBCR_M2_E2E_MINIO_CONSOLE_PORT:-59001}
 registry_port=${HUBCR_M2_E2E_REGISTRY_PORT:-55001}
+registry_debug_port=${HUBCR_M2_E2E_REGISTRY_DEBUG_PORT:-55002}
 api_port=${HUBCR_M2_E2E_API_PORT:-18081}
 database_url="postgres://hubcr:hubcr-dev-only@127.0.0.1:$postgres_port/hubcr?sslmode=disable"
 registry_origin="http://localhost:$registry_port"
@@ -55,6 +56,7 @@ compose() {
     HUBCR_MINIO_PORT="$minio_port" \
     HUBCR_MINIO_CONSOLE_PORT="$minio_console_port" \
     HUBCR_REGISTRY_PORT="$registry_port" \
+    HUBCR_REGISTRY_DEBUG_PORT="$registry_debug_port" \
     HUBCR_API_PORT="$api_port" \
     HUBCR_REGISTRY_AUTH_DIR="$registry_auth_dir" \
     HUBCR_REGISTRY_EVENT_TOKEN="$event_token" \
@@ -134,6 +136,9 @@ if ! wait_for_ready "$api_origin/api/v1/health/ready" 200; then
 fi
 if ! wait_for_ready "$registry_origin/v2/" 401; then
     fail "Registry did not return a Bearer challenge"
+fi
+if ! wait_for_ready "http://127.0.0.1:$registry_debug_port/metrics" 200; then
+    fail "Distribution metrics did not become ready"
 fi
 curl --silent --dump-header "$log_directory/challenge.headers" --output /dev/null "$registry_origin/v2/"
 if ! grep -qi "www-authenticate: Bearer realm=\"$registry_origin/token\",service=\"hubcr-registry\"" "$log_directory/challenge.headers"; then
@@ -241,10 +246,13 @@ if [ "$expired_status" != "401" ]; then
     fail "expired token returned HTTP $expired_status instead of 401"
 fi
 
-case "$token" in
-    *A) tampered_token="${token%?}B" ;;
-    *) tampered_token="${token%?}A" ;;
+token_prefix=${token%.*}
+token_signature=${token##*.}
+case "$token_signature" in
+    A*) tampered_signature="B${token_signature#?}" ;;
+    *) tampered_signature="A${token_signature#?}" ;;
 esac
+tampered_token="$token_prefix.$tampered_signature"
 tampered_status=$(
     printf 'header = "Authorization: Bearer %s"\n' "$tampered_token" |
         curl --silent --output "$log_directory/tampered-token.log" \
@@ -282,11 +290,44 @@ if [ "$outsider_public_status" != "200" ] ||
     ! grep -Fq '"digest":"sha256:' "$log_directory/public-artifacts.json"; then
     fail "public Artifact API did not expose reconciled metadata to an authenticated outsider"
 fi
+curl --fail --silent --show-error "$api_origin/internal/metrics" >"$log_directory/control-plane.metrics"
+for metric in \
+    'hubcr_registry_token_requests_total{outcome="issued"}' \
+    'hubcr_registry_token_actions_total{action="push",decision="denied"}' \
+    'hubcr_registry_notification_requests_total{outcome="accepted"}' \
+    'hubcr_registry_notification_events_total{outcome="processed"}'
+do
+    if ! grep -Eq "^$metric [1-9][0-9]*$" "$log_directory/control-plane.metrics"; then
+        fail "control-plane Registry metric did not record runtime activity: $metric"
+    fi
+done
+curl --fail --silent --show-error "http://127.0.0.1:$registry_debug_port/metrics" \
+    >"$log_directory/distribution.metrics"
+if ! grep -Fq '# HELP' "$log_directory/distribution.metrics"; then
+    fail "Distribution Prometheus endpoint did not expose metrics"
+fi
+curl --fail --silent --show-error "http://127.0.0.1:$registry_debug_port/debug/vars" \
+    >"$log_directory/distribution-vars.json"
+if ! grep -Fq 'notifications' "$log_directory/distribution-vars.json"; then
+    fail "Distribution debug variables did not expose notification queue state"
+fi
+compose logs gateway >"$log_directory/gateway.log"
+if ! grep -Eq '"service":"hubcr-gateway".*"request_id":"[^"]+".*"route":"registry".*"status":401.*"registry_challenge":true' \
+    "$log_directory/gateway.log"; then
+    fail "gateway logs did not record a structured Registry challenge"
+fi
+if ! grep -Fq '"outcome":"issued"' "$log_directory/api.log" ||
+    ! grep -Fq '"outcome":"accepted"' "$log_directory/api.log" ||
+    ! grep -Fq '"request_id":' "$log_directory/api.log"; then
+    fail "control-plane logs omitted correlated Registry decisions"
+fi
 if grep -Fq "$test_password" "$log_directory/api.log" ||
     grep -Fq "$token" "$log_directory/api.log" ||
     grep -Fq "$expired_token" "$log_directory/api.log" ||
-    grep -Fq "$tampered_token" "$log_directory/api.log"; then
-    fail "control-plane logs leaked Registry credentials or tokens"
+    grep -Fq "$tampered_token" "$log_directory/api.log" ||
+    grep -Fq "$test_password" "$log_directory/gateway.log" ||
+    grep -Fq "$token" "$log_directory/gateway.log"; then
+    fail "Registry operational logs leaked credentials or tokens"
 fi
 
-echo "M2 Registry security matrix, event reconciliation, and Artifact API checks passed"
+echo "M2 Registry security matrix, reconciliation, Artifact API, and operational telemetry checks passed"

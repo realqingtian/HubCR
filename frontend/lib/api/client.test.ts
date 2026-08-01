@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { getCurrentUser, login, updateRepository } from "./client";
+import { getCurrentUser, getRepository, login, updateRepository } from "./client";
 
 const user = {
   id: "11111111-1111-4111-8111-111111111111",
@@ -78,6 +78,24 @@ describe("typed API client", () => {
     expect(fetchMock).toHaveBeenCalledWith(
       "/api/v1/namespaces/platform.team/repositories/backend_api",
       expect.objectContaining({ method: "PATCH", credentials: "include" }),
+    );
+  });
+
+  it("reads and validates repository detail routes", async () => {
+    const fetchMock = vi.fn().mockResolvedValue(
+      new Response(JSON.stringify(repository), {
+        status: 200,
+        headers: { "Content-Type": "application/json" },
+      }),
+    );
+    vi.stubGlobal("fetch", fetchMock);
+
+    const result = await getRepository("platform-team", "backend");
+
+    expect(result.name).toBe("backend");
+    expect(fetchMock).toHaveBeenCalledWith(
+      "/api/v1/namespaces/platform-team/repositories/backend",
+      expect.objectContaining({ credentials: "include" }),
     );
   });
 });

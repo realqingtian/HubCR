@@ -78,12 +78,12 @@ hubcr.io/{namespace}/{repository}:{tag}
 
 | 区域 | 当前已实现 | 尚未实现 |
 | --- | --- | --- |
-| Go API | 进程装配、PostgreSQL 生命周期、健康检查、本地 Session、组织/成员、受 Policy 保护的 Repository 与 Artifact/Tag API、Registry Token 签发及经过认证的 Distribution Push 事件接入 | 账号 Bootstrap/邀请兑换 |
+| Go API | 进程装配、PostgreSQL 生命周期、健康检查、本地 Session、组织/成员、受 Policy 保护的 Repository 与 Artifact/Tag API、Registry Token 签发、经过认证的 Distribution Push 事件接入及 Registry 运维指标/日志 | 账号 Bootstrap/邀请兑换 |
 | Go Worker | 可配置轮询循环与优雅退出 | PostgreSQL 任务领取与安全任务 |
-| Web | 最小登录态工作区，以及经运行时校验的认证、组织/成员和 Repository 客户端与流程 | 账号 Bootstrap/邀请兑换、公开发现、Artifact/Tag 和 Registry 工作流 |
+| Web | 登录态 Shell、Overview、Namespace 与 Repository Detail 路由，以及经运行时校验的认证、组织/成员和 Repository 管理客户端与流程 | 账号 Bootstrap/邀请兑换、公开发现、Artifact/Tag 发现及 Registry Quick-start 流程 |
 | OCI 数据面 | 已有 MinIO 支持且受 Token 保护的本地 Distribution Gateway，并通过授权 Docker/OCI 检查及向控制面投递 Push 事件 | Delete 事件协调与获批的生命周期行为 |
-| 基础设施 | PostgreSQL、Redis、MinIO、Distribution 的 Compose 定义；控制面 PostgreSQL 连接及覆盖到 Artifact/Tag 元数据的带版本 GORM 迁移 | Worker/Redis 连接、任务 Schema 迁移和生产部署 |
-| 质量保障 | Go 与 Web 单元检查、隔离 PostgreSQL 持久化/HTTP/跨租户测试、稳定 Playwright 状态测试、真实 M1 全栈浏览器流程、完整 M2 Docker/OCI 授权矩阵、事件驱动元数据及 Artifact API 检查和仓库级 `make check` | M2 运维遥测及后续安全端到端套件 |
+| 基础设施 | PostgreSQL、Redis、MinIO、Distribution 的 Compose 定义（含仅监听 Loopback 的 Distribution 指标/队列可见性）；控制面 PostgreSQL 连接及覆盖到 Artifact/Tag 元数据的带版本 GORM 迁移 | Worker/Redis 连接、任务 Schema 迁移和生产部署 |
+| 质量保障 | Go 与 Web 单元检查、隔离 PostgreSQL 持久化/HTTP/跨租户测试、稳定 Playwright 状态测试、真实 M1 全栈浏览器流程、完整 M2 Docker/OCI 授权矩阵、事件驱动元数据、Artifact API、运维遥测和仓库级 `make check` | 后续安全端到端套件 |
 
 在第 9 节 MVP 退出标准全部通过前，当前脚手架既不能用于生产，也不能被描述成已可用
 的多用户 Registry。
