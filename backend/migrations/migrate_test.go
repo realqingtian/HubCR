@@ -6,6 +6,8 @@ import (
 	"testing"
 	"time"
 
+	"github.com/go-gormigrate/gormigrate/v2"
+
 	"hubcr.io/hubcr/internal/platform/postgres"
 )
 
@@ -24,7 +26,7 @@ func TestMigrationsHaveUniqueOrderedIDs(t *testing.T) {
 	}
 }
 
-func TestApplyFreshDatabaseRepeatAndUnknownMigrationDetection(t *testing.T) {
+func TestApplyM0UpgradeRepeatAndUnknownMigrationDetection(t *testing.T) {
 	databaseURL := os.Getenv("HUBCR_TEST_DATABASE_URL")
 	if databaseURL == "" {
 		t.Skip("HUBCR_TEST_DATABASE_URL is not set")
@@ -42,8 +44,20 @@ func TestApplyFreshDatabaseRepeatAndUnknownMigrationDetection(t *testing.T) {
 	}
 	defer pool.Close()
 
+	foundation := gormigrate.New(pool.ORM().WithContext(ctx), options, all()[:1])
+	if err := foundation.Migrate(); err != nil {
+		t.Fatalf("apply M0 foundation migration: %v", err)
+	}
+	var foundationCount int64
+	if err := pool.ORM().Table(options.TableName).Count(&foundationCount).Error; err != nil {
+		t.Fatalf("count M0 migration records: %v", err)
+	}
+	if foundationCount != 1 {
+		t.Fatalf("M0 migration record count = %d, want 1", foundationCount)
+	}
+
 	if err := Apply(ctx, pool.ORM()); err != nil {
-		t.Fatalf("first Apply() error = %v", err)
+		t.Fatalf("M0 to M1 Apply() error = %v", err)
 	}
 	if err := Apply(ctx, pool.ORM()); err != nil {
 		t.Fatalf("second Apply() error = %v", err)

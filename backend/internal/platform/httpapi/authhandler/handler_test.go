@@ -16,9 +16,10 @@ func TestLoginSetsOpaqueSecureCookieWithoutReturningToken(t *testing.T) {
 	now := time.Date(2026, 8, 1, 12, 0, 0, 0, time.UTC)
 	service := &handlerTestAuthenticator{loginResult: auth.LoginResult{
 		User: auth.User{
-			ID:        "11111111-1111-4111-8111-111111111111",
-			Username:  "owner",
-			CreatedAt: now,
+			ID:                "11111111-1111-4111-8111-111111111111",
+			Username:          "owner",
+			PersonalNamespace: "owner",
+			CreatedAt:         now,
 		},
 		Token:     "opaque-secret-token",
 		ExpiresAt: now.Add(24 * time.Hour),
@@ -98,7 +99,7 @@ func TestLoginFailureIsUniformAndValidationRunsBeforeService(t *testing.T) {
 func TestCurrentUserAndLogoutSessionHandling(t *testing.T) {
 	now := time.Date(2026, 8, 1, 12, 0, 0, 0, time.UTC)
 	service := &handlerTestAuthenticator{user: auth.User{
-		ID: "11111111-1111-4111-8111-111111111111", Username: "owner", CreatedAt: now,
+		ID: "11111111-1111-4111-8111-111111111111", Username: "owner", PersonalNamespace: "owner", CreatedAt: now,
 	}}
 	handler := testHandler(service, false)
 
@@ -113,7 +114,7 @@ func TestCurrentUserAndLogoutSessionHandling(t *testing.T) {
 	meRequest.AddCookie(&http.Cookie{Name: SessionCookieName, Value: "session-token"})
 	meRecorder := httptest.NewRecorder()
 	handler.ServeHTTP(meRecorder, meRequest)
-	if meRecorder.Code != http.StatusOK || !strings.Contains(meRecorder.Body.String(), `"username":"owner"`) {
+	if meRecorder.Code != http.StatusOK || !strings.Contains(meRecorder.Body.String(), `"personal_namespace":"owner"`) {
 		t.Fatalf("me status/body = %d %s", meRecorder.Code, meRecorder.Body.String())
 	}
 

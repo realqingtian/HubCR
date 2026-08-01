@@ -17,3 +17,14 @@ body {
   color: var(--foreground);
   font-family: ui-sans-serif, system-ui, sans-serif;
 }
+
+button,
+input,
+select {
+  font: inherit;
+}
+
+::selection {
+  background: #bae6fd;
+  color: #0f172a;
+}

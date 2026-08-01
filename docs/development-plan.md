@@ -4,7 +4,7 @@
 
 - Status: active living plan
 - Plan start: 2026-08-01
-- Current stage: Milestone 0 local exit complete; Milestone 1 M1-06 complete and M1-07 ready
+- Current stage: Milestones 0 and 1 complete; M2-01 is next
 - Requirements: [HubCR product requirements](requirements.md)
 
 This plan converts the product baseline into ordered, testable work. It is a delivery
@@ -118,7 +118,7 @@ encoding open product policy.
 | M0-04 | `DONE` | PostgreSQL connection lifecycle, configuration validation and dependency-aware readiness | M0-02 | 1–2 days |
 | M0-05 | `DONE` | Migration tool and initial schema conventions with forward and clean-database tests | M0-04 | 1–2 days |
 | M0-06 | `DONE` | Shared API response/error, request ID, JSON and pagination conventions | None | 1–2 days |
-| M0-07 | `IN PROGRESS` | CI workflow is implemented and local gates pass; hosted-run evidence waits for authorized push | User-authorized push | 1–2 days |
+| M0-07 | `DONE` | CI workflow and hosted `make check` plus isolated PostgreSQL run pass on the authorized feature-branch push | M0-01 | 1–2 days |
 | M0-08 | `DONE` | G-01 and G-02 decision records approved in both languages on 2026-08-01 | Product owner | 0.5–1 day decision session |
 | M0-09 | `DONE` | Integration-test harness provisions isolated PostgreSQL and exercises migrations | M0-04, M0-05 | 1–2 days |
 
@@ -171,12 +171,12 @@ encoding open product policy.
   database, run the API and worker, and pass all M0 checks using documented commands.
 - README and Compose documentation match the tested workflow.
 
-The local M0 exit audit passed on 2026-08-01: infrastructure smoke, migrations,
+The M0 exit audit passed on 2026-08-01: infrastructure smoke, migrations,
 dependency-aware health behavior, API contract tests, integration tests, `make check`,
-and documentation checks passed. M0-07 remains open only for a hosted GitHub Actions
-run, which requires an explicitly authorized push. That external evidence does not
-change the local implementation boundary and does not block starting M1-01 on this
-feature branch.
+and documentation checks passed locally. The authorized feature-branch push then
+produced successful hosted GitHub Actions
+[run 30685778563](https://github.com/realqingtian/HubCR/actions/runs/30685778563) for
+commit `4a8232309101dc41ed2beb60f2b935b4b984e8b6`, closing M0-07.
 
 ## 6. Milestone 1 — identity, ownership, and authorization
 
@@ -191,10 +191,41 @@ No Registry token is issued in this milestone.
 | M1-04 | `DONE` | Organization and membership schema implementing the accepted role matrix | G-02, M1-01 | FR-ORG-001–004 |
 | M1-05 | `DONE` | Organization create/list/detail and member-management APIs | M1-04 | FR-ORG-001–003 |
 | M1-06 | `DONE` | Central authorization policy service with table-driven capability tests | G-02, M1-03, M1-04 | FR-AUTHZ-001–003 |
-| M1-07 | `READY` | Repository model, explicit visibility and uniqueness constraints | M1-03, M1-04 | FR-REP-001–002 |
-| M1-08 | `PLANNED` | Repository create/list/detail/update APIs using policy checks | M1-06, M1-07 | FR-REP-001–005 |
-| M1-09 | `PLANNED` | Typed frontend API contracts and minimal authentication/organization/repository flows | M1-02, M1-05, M1-08 | Required journeys 1–3 |
-| M1-10 | `PLANNED` | Cross-tenant isolation integration suite | M1-08 | FR-AUTHZ-001–002 |
+| M1-07 | `DONE` | Repository model, explicit visibility and uniqueness constraints | M1-03, M1-04 | FR-REP-001–002 |
+| M1-08 | `DONE` | Repository create/list/detail/update APIs using policy checks | M1-06, M1-07 | FR-REP-001–005 |
+| M1-09 | `DONE` | Typed frontend API contracts and minimal authentication/organization/repository flows | M1-02, M1-05, M1-08 | Required journeys 1–3 |
+| M1-10 | `DONE` | Cross-tenant isolation integration suite | M1-08 | FR-AUTHZ-001–002 |
+
+M1-07 evidence on 2026-08-01: repository domain tests cover normalization and explicit
+visibility; the isolated PostgreSQL suite covers personal and organization namespaces,
+namespace/name collisions, database checks, and concurrent uniqueness; `make check`
+passes across backend, frontend, documentation, and secret gates.
+
+M1-08 evidence on 2026-08-01: table-driven service tests enforce the personal and
+four-role organization capability matrix; HTTP tests cover authentication, validation,
+private non-disclosure, cross-site rejection, and mutation denial; the isolated
+PostgreSQL HTTP flow proves `WRITER` create/description access, `OWNER` visibility
+changes, outsider public discovery, private filtering, and atomic visibility evidence.
+`make test-integration`, `make check`, bilingual API documentation, and the reviewed
+OpenAPI contract all pass.
+
+M1-09 evidence on 2026-08-01: the frontend validates authentication, organization,
+membership, and repository responses with Zod and uses credentialed typed clients plus
+TanStack Query for server state. The minimal workspace exposes session loading/login,
+explicit personal namespace, organization/member and personal/organization repository
+flows, including empty, denial, validation and unavailable states. Vitest has 7 passing
+tests; the production build passes; Playwright has 3 passing deterministic
+browser-level workflow and failure-state tests; and manual browser checks cover
+signed-out, authenticated, desktop, and 390 px responsive states. The browser client
+uses same-origin `/api` requests with a server-side Next.js rewrite so local operation
+does not depend on an unavailable cross-origin CORS policy.
+
+M1-10 evidence on 2026-08-01: the isolated PostgreSQL suite now composes the real GORM
+stores, server-side session authenticator, repository service and centralized policy.
+It proves personal-namespace isolation, two-organization tenant isolation, the
+owner/admin/writer/reader mutation and discovery boundaries, public/private discovery,
+missing namespaces, and missing, invalid, expired and revoked sessions. The complete
+`make test-integration` suite passes.
 
 ### M1 mandatory test matrix
 
@@ -214,6 +245,19 @@ No Registry token is issued in this milestone.
 - Authorization behavior is concentrated behind an explicit module contract and its
   capability matrix is fully tested.
 - Migrations can upgrade the M0 schema and create the complete M1 schema from zero.
+
+The M1 exit audit passed on 2026-08-01. `make test-m1-e2e` provisions an empty isolated
+PostgreSQL database, applies the GORM/Gormigrate schema, seeds two test-only identities
+through the GORM auth store, and starts the real Go API plus the production Next.js
+server. Chromium then completes required journeys 1–3: session login and explicit
+personal namespace, private repository creation followed by a public visibility
+change, organization creation, and member addition. The migration integration test
+also upgrades an M0-foundation migration state to all M1 migrations and verifies
+repeat application. `make test-integration`, `make check`, 7 Vitest tests, 3 mocked
+Playwright state tests, and the real full-stack Playwright journey all pass. The
+test-only identity fixture is not presented as a product registration or bootstrap
+entry point; administrator invitation APIs remain outside these three M1 exit
+journeys.
 
 ## 7. Milestone 2 — Registry authentication and metadata
 
@@ -323,15 +367,14 @@ operator workflow, and failure-recovery test. This milestone is not a single rel
 
 This is the recommended order from the current repository state:
 
-1. **Implement M1-07:** add the repository model with explicit visibility and
-   namespace/name uniqueness.
-2. **Implement M1-08:** expose repository APIs only through the centralized policy.
-3. **Finish M0-07 hosted evidence:** after the user authorizes a push, confirm the
-   configured GitHub Actions workflow passes `make check` and the isolated PostgreSQL
-   suite.
+1. **Specify M2-01:** document the Registry challenge, service, audience, repository
+   scope grammar, action intersection, anonymous-public behavior and token TTL.
+2. **Implement M2-02/M2-03 after review:** add rotation-ready signing and the `/token`
+   decision boundary without using web sessions as Registry credentials.
+3. **Connect M2-04 only after token tests pass:** configure Distribution and the local
+   gateway, then prove exact repository/action isolation before metadata ingestion.
 
-Item 3 is an external validation task and can proceed independently. Keep commits small
-enough that one work package and its tests can be reviewed together.
+Keep commits small enough that one work package and its tests can be reviewed together.
 
 ## 12. Validation strategy
 

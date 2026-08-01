@@ -30,6 +30,9 @@ that plain `AutoMigrate` does not provide, while CI exercises the same code as t
   normalized personal namespaces, enforces one namespace per user, and transactionally
   backfills compatible pre-existing users. `000004_organizations` extends namespace
   ownership for organizations and adds organizations plus four-role memberships.
+  `000005_repositories` adds namespace-owned repository identities, explicit
+  `PUBLIC`/`PRIVATE` visibility without a database default, creator and initial
+  visibility-change evidence, and namespace/name uniqueness.
 
 Run migrations against the configured database from the repository root:
 

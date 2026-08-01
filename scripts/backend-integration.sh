@@ -26,4 +26,8 @@ HUBCR_TEST_DATABASE_URL="postgres://hubcr_test:hubcr-test-only@127.0.0.1:${test_
 HUBCR_TEST_DATABASE_URL="postgres://hubcr_test:hubcr-test-only@127.0.0.1:${test_port}/hubcr_test?sslmode=disable" \
     go -C backend test ./internal/platform/postgres/organizationstore -count=1
 HUBCR_TEST_DATABASE_URL="postgres://hubcr_test:hubcr-test-only@127.0.0.1:${test_port}/hubcr_test?sslmode=disable" \
+    go -C backend test ./internal/platform/postgres/repositorystore -count=1
+HUBCR_TEST_DATABASE_URL="postgres://hubcr_test:hubcr-test-only@127.0.0.1:${test_port}/hubcr_test?sslmode=disable" \
+    go -C backend test ./internal/platform/httpapi/repositoryhandler -count=1
+HUBCR_TEST_DATABASE_URL="postgres://hubcr_test:hubcr-test-only@127.0.0.1:${test_port}/hubcr_test?sslmode=disable" \
     go -C backend test ./internal/platform/httpapi/organizationhandler -count=1

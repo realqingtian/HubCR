@@ -75,7 +75,8 @@ recovers automatically when the dependency returns.
 - `POST /api/v1/auth/login` accepts a local username and password and returns the user
   plus session expiry. The opaque session secret is returned only as the
   `hubcr_session` cookie, never in JSON.
-- `GET /api/v1/auth/me` returns the authenticated user or `401 authentication_failed`.
+- `GET /api/v1/auth/me` returns the authenticated user and explicit
+  `personal_namespace`, or `401 authentication_failed`.
 - `POST /api/v1/auth/logout` revokes the server-side session, clears the cookie, and is
   idempotent when the cookie is missing or unknown.
 - The cookie is `HttpOnly`, `SameSite=Lax`, scoped to `/`, and has an explicit expiry.
@@ -102,6 +103,31 @@ All organization endpoints require a valid `hubcr_session` cookie.
   or removed.
 - Organization and member lists use the shared `limit` plus opaque `cursor` contract.
   Member write requests marked `Sec-Fetch-Site: cross-site` are rejected.
+
+## Repositories
+
+All repository endpoints currently require a valid `hubcr_session` cookie and use the
+canonical path `/api/v1/namespaces/{namespace}/repositories/{repository}`.
+
+- `POST /api/v1/namespaces/{namespace}/repositories` creates a repository with an
+  explicit `PUBLIC` or `PRIVATE` visibility. Personal namespace owners and
+  organization `OWNER`, `ADMIN`, or `WRITER` members may create repositories.
+- `GET /api/v1/namespaces/{namespace}/repositories` returns a bounded page. A caller
+  outside the namespace sees only explicitly `PUBLIC` repositories; personal owners
+  and all organization roles may also discover `PRIVATE` repositories.
+- `GET .../{repository}` returns `404` for a missing repository and for a private
+  repository the caller cannot discover, avoiding private-existence disclosure.
+- `PATCH .../{repository}` can change `description`, `visibility`, or both. Personal
+  owners and organization `OWNER`/`ADMIN` may change visibility; organization
+  `WRITER` may edit descriptions but cannot change visibility; `READER` cannot mutate
+  repository metadata.
+- Visibility changes update `visibility_updated_by_user_id`,
+  `visibility_updated_at`, and `updated_at` atomically. Description-only changes leave
+  the visibility evidence unchanged.
+- Namespace and repository names are case-normalized lowercase OCI path components,
+  at most 64 bytes. Repository names are unique within a namespace. Repository lists
+  use the shared `limit` plus opaque `cursor` contract, and mutation requests marked
+  `Sec-Fetch-Site: cross-site` are rejected.
 
 ## OpenAPI ownership
 

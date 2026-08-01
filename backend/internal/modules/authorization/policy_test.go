@@ -62,6 +62,28 @@ func TestPersonalNamespaceOwnerCapabilities(t *testing.T) {
 	}
 }
 
+func TestRepositoryDiscoveryRequiresPublicVisibilityOrPrivatePullCapability(t *testing.T) {
+	policy := NewPolicy()
+	tests := []struct {
+		name           string
+		isPublic       bool
+		canPullPrivate bool
+		want           bool
+	}{
+		{name: "public without membership", isPublic: true, want: true},
+		{name: "private authorized", canPullPrivate: true, want: true},
+		{name: "private unauthorized", want: false},
+		{name: "missing visibility and access", want: false},
+	}
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			if got := policy.AllowsRepositoryDiscovery(test.isPublic, test.canPullPrivate); got != test.want {
+				t.Fatalf("AllowsRepositoryDiscovery(%v, %v) = %v, want %v", test.isPublic, test.canPullPrivate, got, test.want)
+			}
+		})
+	}
+}
+
 func allow(roles ...organizations.Role) map[organizations.Role]bool {
 	result := make(map[organizations.Role]bool, len(roles))
 	for _, role := range roles {

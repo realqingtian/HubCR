@@ -139,9 +139,10 @@ cover. Add Playwright coverage when complete user workflows are introduced.
 - Store timestamps in UTC and return an explicit timezone in serialized values.
 - Add indexes based on known access patterns and verify uniqueness constraints at the
   database boundary.
-- Namespace names are lowercase ASCII OCI path components, at most 64 bytes, matching
-  `[a-z0-9]+(?:[._-][a-z0-9]+)*`. Normalization lowercases only; whitespace, Unicode,
-  path separators, and repeated separators are rejected rather than rewritten.
+- Namespace and repository names are lowercase ASCII OCI path components, at most 64
+  bytes, matching `[a-z0-9]+(?:[._-][a-z0-9]+)*`. Normalization lowercases only;
+  whitespace, Unicode, path separators, and repeated separators are rejected rather
+  than rewritten. Repository names are unique within their namespace.
 - After the first public release, migrations are append-only. Never edit a migration
   that may have been applied outside the local machine.
 - Run migrations as an explicit command under the PostgreSQL advisory lock and verify

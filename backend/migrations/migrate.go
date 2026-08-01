@@ -44,5 +44,6 @@ func all() []*gormigrate.Migration {
 		identityPersistenceMigration(),
 		personalNamespacesMigration(),
 		organizationsMigration(),
+		repositoriesMigration(),
 	}
 }

@@ -233,10 +233,11 @@ func testIdentity(id auth.ID, username string, now time.Time) auth.Identity {
 	namespaceName := strings.ToLower(username)
 	return auth.Identity{
 		User: auth.User{
-			ID:        id,
-			Username:  username,
-			CreatedAt: now,
-			UpdatedAt: now,
+			ID:                id,
+			Username:          username,
+			PersonalNamespace: namespaceName,
+			CreatedAt:         now,
+			UpdatedAt:         now,
 		},
 		Credential: auth.LocalCredential{
 			UserID:            id,

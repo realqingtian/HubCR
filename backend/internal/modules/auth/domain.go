@@ -4,10 +4,11 @@ import "time"
 
 // User is the domain representation of an interactive HubCR user.
 type User struct {
-	ID        ID
-	Username  string
-	CreatedAt time.Time
-	UpdatedAt time.Time
+	ID                ID
+	Username          string
+	PersonalNamespace string
+	CreatedAt         time.Time
+	UpdatedAt         time.Time
 }
 
 // LocalCredential contains only the derived password representation. Plaintext

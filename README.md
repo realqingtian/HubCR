@@ -11,11 +11,12 @@ OCI upload and download behavior is delegated to CNCF Distribution instead of be
 reimplemented.
 
 > [!IMPORTANT]
-> HubCR is in early development. The repository contains a runnable project scaffold,
-> health and local-session authentication endpoints, and local infrastructure
-> definitions. Account bootstrap/invitation redemption, repository workflows,
-> registry token issuance, and security features are not implemented yet.
-> Do not use the current version as a production registry.
+> HubCR is in early development. The repository contains a runnable control plane,
+> local-session, organization and repository APIs, a minimal authenticated web
+> workspace, and local infrastructure definitions. Account bootstrap/invitation
+> redemption, Registry integration, registry token issuance, artifact metadata, and
+> security features are not implemented yet. Do not use the current version as a
+> production registry.
 
 ## What HubCR is for
 
@@ -50,12 +51,12 @@ docker push hubcr.io/my-organization/backend:v1.0.0
 
 | Area | Current status |
 | --- | --- |
-| Go control plane | Runnable scaffold with PostgreSQL pool lifecycle, graceful shutdown, dependency-aware health, and local-session authentication endpoints |
+| Go control plane | Runnable service with PostgreSQL lifecycle, dependency-aware health, local sessions, organizations, repositories, and centralized authorization |
 | Asynchronous worker | Runnable polling scaffold; job persistence is not connected |
-| Web application | Next.js scaffold with typed API utilities and query provider |
+| Web application | Minimal authenticated Next.js workspace with typed, runtime-validated auth, organization/member, and repository flows |
 | OCI data plane | Local CNCF Distribution configuration backed by MinIO |
 | PostgreSQL and Redis | Local Compose services defined; the control plane connects to PostgreSQL, while Redis is not connected |
-| Users, organizations, and repositories | Identity/session APIs, personal namespaces, organization/member APIs, and centralized capability policy exist; account bootstrap and repositories are pending |
+| Users, organizations, and repositories | Identity/session APIs, personal namespaces, organization/member APIs, centralized capability policy, policy-protected repository APIs, and the corresponding minimal web workspace exist; account bootstrap/invitation redemption remains pending |
 | Registry token service | Architecture reserved; token issuance is pending |
 | Trivy and Cosign | Worker boundaries reserved; integrations are pending |
 
@@ -241,6 +242,7 @@ docker compose --env-file .env -f deployments/compose/compose.yaml down
 | `make infra-smoke` | Check PostgreSQL, Redis, MinIO, and Distribution |
 | `make test` | Run Go and frontend unit tests |
 | `make test-integration` | Provision isolated PostgreSQL and run backend integration tests |
+| `make test-m1-e2e` | Run M1 journeys 1–3 through real PostgreSQL, Go API, Next.js, and Chromium |
 | `make check-docs` | Validate bilingual Markdown pairs, links, whitespace, and final newlines |
 | `make check-secrets` | Scan tracked text for high-confidence credential patterns |
 | `make check` | Run formatting checks, vet, tests, type checking, lint, and production build |
@@ -260,7 +262,8 @@ Run `make check` before requesting review or committing a completed change.
 | `HUBCR_SESSION_TTL` | `24h` | Revocable web-session lifetime |
 | `HUBCR_SESSION_COOKIE_SECURE` | `false` | Local HTTP cookie mode; set `true` for every HTTPS deployment |
 | `HUBCR_WORKER_POLL_INTERVAL` | `5s` | Worker polling interval |
-| `NEXT_PUBLIC_API_BASE_URL` | `http://localhost:8080` | Browser-visible control-plane base URL |
+| `HUBCR_CONTROL_PLANE_URL` | `http://127.0.0.1:8080` | Server-side target for the Next.js same-origin `/api` rewrite |
+| `NEXT_PUBLIC_API_BASE_URL` | same origin | Optional browser-visible override for a CORS-enabled endpoint |
 | `POSTGRES_DB` | `hubcr` | Local PostgreSQL database |
 | `POSTGRES_USER` | `hubcr` | Local PostgreSQL user |
 | `POSTGRES_PASSWORD` | development only | Local PostgreSQL password |

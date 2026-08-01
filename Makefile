@@ -1,4 +1,4 @@
-.PHONY: dev-api dev-worker dev-web db-migrate infra-config infra-up infra-down infra-status infra-smoke test test-integration check-docs check-secrets check
+.PHONY: dev-api dev-worker dev-web db-migrate infra-config infra-up infra-down infra-status infra-smoke test test-integration test-m1-e2e check-docs check-secrets check
 
 HUBCR_COMPOSE_FILE ?= deployments/compose/compose.yaml
 HUBCR_ENV_FILE ?= .env
@@ -42,6 +42,9 @@ test:
 
 test-integration:
 	sh scripts/backend-integration.sh
+
+test-m1-e2e:
+	sh scripts/m1-e2e.sh
 
 check-docs:
 	python3 scripts/check-docs.py

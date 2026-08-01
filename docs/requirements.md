@@ -89,12 +89,12 @@ As of 2026-08-01, the repository contains:
 
 | Area | Implemented now | Not implemented yet |
 | --- | --- | --- |
-| Go API | Process composition, PostgreSQL lifecycle, health, local session APIs, and organization/member APIs | Account bootstrap/invitation redemption, repositories, Registry tokens, metadata APIs |
+| Go API | Process composition, PostgreSQL lifecycle, health, local session, organization/member, and policy-protected repository APIs | Account bootstrap/invitation redemption, Registry tokens, artifact/tag metadata APIs |
 | Go worker | Configured polling loop and graceful shutdown | PostgreSQL job claiming and security jobs |
-| Web | Next.js application scaffold, shared providers, typed health API schema | Product navigation, authentication and registry workflows |
+| Web | Minimal authenticated workspace with runtime-validated auth, organization/member, and repository clients and flows | Account bootstrap/invitation redemption, public discovery, artifact/tag, and Registry workflows |
 | OCI data plane | Compose definitions for Distribution backed by MinIO | Token authentication, event integration and end-to-end authorized push/pull |
-| Infrastructure | Compose definitions for PostgreSQL, Redis, MinIO and Distribution; control-plane PostgreSQL connection and versioned GORM migration foundation | Worker/Redis connections, product-schema migrations and production deployment |
-| Quality | Go and web unit checks, isolated PostgreSQL migration/connection tests and repository-wide `make check` | Product integration and end-to-end test suites |
+| Infrastructure | Compose definitions for PostgreSQL, Redis, MinIO and Distribution; control-plane PostgreSQL connection and versioned GORM migrations through repositories | Worker/Redis connections, artifact/job schema migrations and production deployment |
+| Quality | Go and web unit checks, isolated PostgreSQL persistence/HTTP/cross-tenant tests, deterministic Playwright state tests, a real M1 full-stack browser journey, and repository-wide `make check` | OCI client and later metadata/security end-to-end suites |
 
 The scaffold is not production-ready and must not be described as a functioning
 multi-user registry until the MVP exit criteria in section 9 pass.
@@ -195,11 +195,11 @@ requires a pull decision to block on it.
 
 ## 6. Domain and data constraints
 
-The durable model now includes `User`, local credential, revocable web session, and
-administrator-invitation records. Later MVP work adds `Organization`,
-`OrganizationMember`, `Namespace`, `Repository`, `Artifact`, and `Tag`. Security and
-operations milestones later add job, scan, SBOM, signature, trust-policy, robot,
-token, and audit records.
+The durable model now includes `User`, local credential, revocable web session,
+administrator invitation, `Organization`, `OrganizationMember`, `Namespace`, and
+`Repository` records. Later MVP work adds `Artifact` and `Tag`. Security and operations
+milestones later add job, scan, SBOM, signature, trust-policy, robot, token, and audit
+records.
 
 Mandatory data constraints are:
 

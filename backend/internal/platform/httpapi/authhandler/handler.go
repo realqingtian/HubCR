@@ -40,9 +40,10 @@ type loginRequest struct {
 }
 
 type userResponse struct {
-	ID        string `json:"id"`
-	Username  string `json:"username"`
-	CreatedAt string `json:"created_at"`
+	ID                string `json:"id"`
+	Username          string `json:"username"`
+	PersonalNamespace string `json:"personal_namespace"`
+	CreatedAt         string `json:"created_at"`
 }
 
 type loginResponse struct {
@@ -131,9 +132,10 @@ func validateLogin(input loginRequest) []httpapi.FieldError {
 
 func mapUser(user auth.User) userResponse {
 	return userResponse{
-		ID:        string(user.ID),
-		Username:  user.Username,
-		CreatedAt: httpapi.FormatTime(user.CreatedAt),
+		ID:                string(user.ID),
+		Username:          user.Username,
+		PersonalNamespace: user.PersonalNamespace,
+		CreatedAt:         httpapi.FormatTime(user.CreatedAt),
 	}
 }
 

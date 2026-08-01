@@ -9,9 +9,10 @@ HubCR 是面向个人开发者与组织的容器镜像中心。它围绕 OCI Reg
 成熟的 OCI 上传与下载行为交给 CNCF Distribution 处理，而不是从零重复实现。
 
 > [!IMPORTANT]
-> HubCR 目前处于早期开发阶段。仓库中已经包含可运行的项目骨架、健康检查与本地
-> Session 认证接口以及本地基础设施配置，但账号 Bootstrap/邀请兑换、仓库工作流、
-> Registry Token 签发和安全能力尚未实现。当前版本不能作为生产环境镜像仓库使用。
+> HubCR 目前处于早期开发阶段。仓库中已经包含可运行的控制面、本地 Session、组织和
+> Repository API、最小登录态 Web 工作区以及本地基础设施配置，但账号 Bootstrap/邀请
+> 兑换、Registry 集成、Registry Token 签发、Artifact 元数据和安全能力尚未实现。
+> 当前版本不能作为生产环境镜像仓库使用。
 
 ## HubCR 的用途
 
@@ -46,12 +47,12 @@ docker push hubcr.io/my-organization/backend:v1.0.0
 
 | 范围 | 当前状态 |
 | --- | --- |
-| Go 控制面 | 已有可运行骨架、PostgreSQL 连接池生命周期、优雅退出、依赖感知健康检查和本地 Session 认证接口 |
+| Go 控制面 | 已有可运行服务、PostgreSQL 生命周期、依赖感知健康检查、本地 Session、组织、Repository 和集中授权 |
 | 异步 Worker | 已有可运行的轮询骨架，尚未连接任务持久化 |
-| Web 应用 | 已有 Next.js 骨架、类型化 API 工具与 Query Provider |
+| Web 应用 | 已有最小登录态 Next.js 工作区，以及经过运行时校验的类型化认证、组织/成员和 Repository 流程 |
 | OCI 数据面 | 已定义由 MinIO 提供存储的本地 CNCF Distribution 配置 |
 | PostgreSQL 与 Redis | 已定义本地 Compose 服务；控制面已连接 PostgreSQL，Redis 尚未接入 |
-| 用户、组织与仓库 | 已有身份/Session API、个人 Namespace、组织/成员 API 与集中能力 Policy；账号 Bootstrap 与仓库仍待实现 |
+| 用户、组织与仓库 | 已有身份/Session API、个人 Namespace、组织/成员 API、集中能力 Policy、受 Policy 保护的 Repository API 及对应最小 Web 工作区；账号 Bootstrap/邀请兑换仍待实现 |
 | Registry Token 服务 | 已预留架构边界，令牌签发尚未实现 |
 | Trivy 与 Cosign | 已预留 Worker 边界，集成尚未实现 |
 
@@ -231,6 +232,7 @@ docker compose --env-file .env -f deployments/compose/compose.yaml down
 | `make infra-smoke` | 检查 PostgreSQL、Redis、MinIO 和 Distribution |
 | `make test` | 运行 Go 与前端单元测试 |
 | `make test-integration` | 提供隔离 PostgreSQL 并运行后端集成测试 |
+| `make test-m1-e2e` | 通过真实 PostgreSQL、Go API、Next.js 与 Chromium 运行 M1 流程 1–3 |
 | `make check-docs` | 验证双语 Markdown 配对、链接、空白与文件末尾换行 |
 | `make check-secrets` | 扫描已跟踪文本中的高置信度凭据模式 |
 | `make check` | 运行格式检查、Vet、测试、类型检查、Lint 和生产构建 |
@@ -250,7 +252,8 @@ docker compose --env-file .env -f deployments/compose/compose.yaml down
 | `HUBCR_SESSION_TTL` | `24h` | 可撤销 Web Session 的有效期 |
 | `HUBCR_SESSION_COOKIE_SECURE` | `false` | 本地 HTTP Cookie 模式；所有 HTTPS 部署必须设为 `true` |
 | `HUBCR_WORKER_POLL_INTERVAL` | `5s` | Worker 轮询间隔 |
-| `NEXT_PUBLIC_API_BASE_URL` | `http://localhost:8080` | 浏览器可见的控制面地址 |
+| `HUBCR_CONTROL_PLANE_URL` | `http://127.0.0.1:8080` | Next.js 同源 `/api` Rewrite 的服务端目标 |
+| `NEXT_PUBLIC_API_BASE_URL` | 同源 | 面向已启用 CORS 端点的可选浏览器公开覆盖项 |
 | `POSTGRES_DB` | `hubcr` | 本地 PostgreSQL 数据库 |
 | `POSTGRES_USER` | `hubcr` | 本地 PostgreSQL 用户 |
 | `POSTGRES_PASSWORD` | 仅供开发 | 本地 PostgreSQL 密码 |

@@ -38,6 +38,13 @@ func (Policy) AllowsPersonalNamespace(isOwner bool, capability Capability) bool 
 	}
 }
 
+// AllowsRepositoryDiscovery keeps public/private discovery inside the centralized
+// policy boundary. Missing visibility must be represented as neither public nor a
+// valid private-pull capability, which denies discovery.
+func (Policy) AllowsRepositoryDiscovery(isPublic, canPullPrivate bool) bool {
+	return isPublic || canPullPrivate
+}
+
 func (p Policy) CanAssignMember(actor, desired organizations.Role) bool {
 	if desired == organizations.RoleOwner || desired == organizations.RoleAdmin {
 		return p.AllowsOrganization(actor, ManageElevatedMembers)

@@ -48,6 +48,7 @@ func (s *Store) CredentialByUsername(ctx context.Context, username string) (auth
 	}
 	identity := identityFromRecords(user, credential)
 	identity.PersonalNamespace = auth.PersonalNamespace{ID: auth.ID(namespace.ID), Name: namespace.Name}
+	identity.User.PersonalNamespace = namespace.Name
 	return identity, nil
 }
 
@@ -56,7 +57,13 @@ func (s *Store) UserByID(ctx context.Context, id auth.ID) (auth.User, error) {
 	if err := s.database.WithContext(ctx).Where("id = ?", string(id)).First(&record).Error; err != nil {
 		return auth.User{}, classify("find user by ID", err)
 	}
-	return userFromRecord(record), nil
+	var namespace personalNamespaceRecord
+	if err := s.database.WithContext(ctx).Where("owner_user_id = ?", string(id)).First(&namespace).Error; err != nil {
+		return auth.User{}, classify("find user personal namespace", err)
+	}
+	user := userFromRecord(record)
+	user.PersonalNamespace = namespace.Name
+	return user, nil
 }
 
 func (s *Store) CreateSession(ctx context.Context, session auth.Session) error {

@@ -4,7 +4,7 @@
 
 - 状态：持续维护中的有效计划
 - 计划开始：2026-08-01
-- 当前阶段：里程碑 0 本地退出完成；里程碑 1 的 M1-06 已完成、M1-07 已就绪
+- 当前阶段：里程碑 0 与里程碑 1 已完成；下一项为 M2-01
 - 需求基线：[HubCR 产品需求](requirements.zh-CN.md)
 
 本计划将产品基线转化为有顺序、可测试的工作项。它是一份交付管理文档：完成工作后
@@ -105,7 +105,7 @@ G-01 与 G-02 关闭后已重新估算 M1。管理员邀请、本地密码凭据
 | M0-04 | `DONE` | PostgreSQL 连接生命周期、配置验证与依赖感知的就绪检查 | M0-02 | 1–2 天 |
 | M0-05 | `DONE` | 迁移工具和首期 Schema 规范，具备正向与空库测试 | M0-04 | 1–2 天 |
 | M0-06 | `DONE` | 统一 API 响应/错误、Request ID、JSON 和分页规范 | 无 | 1–2 天 |
-| M0-07 | `IN PROGRESS` | CI Workflow 已实现且本地 Gate 通过；Hosted Run 证据等待授权 Push | 用户授权 Push | 1–2 天 |
+| M0-07 | `DONE` | CI Workflow 已在获准 Push 的功能分支上通过 Hosted `make check` 与隔离 PostgreSQL Run | M0-01 | 1–2 天 |
 | M0-08 | `DONE` | G-01 与 G-02 决策记录已于 2026-08-01 以中英文获批 | 产品负责人 | 0.5–1 天决策会议 |
 | M0-09 | `DONE` | 集成测试 Harness 提供隔离 PostgreSQL 并执行迁移 | M0-04、M0-05 | 1–2 天 |
 
@@ -152,10 +152,11 @@ G-01 与 G-02 关闭后已重新估算 M1。管理员邀请、本地密码凭据
   Worker，并通过全部 M0 检查。
 - README 与 Compose 文档符合经过测试的真实流程。
 
-2026-08-01 的 M0 本地退出审计已通过：基础设施冒烟、迁移、依赖感知健康行为、API
-契约测试、集成测试、`make check` 与文档检查均通过。M0-07 只剩 Hosted GitHub
-Actions Run，执行它需要明确授权 Push。该外部证据不改变本地实现边界，也不阻塞在
-此功能分支启动 M1-01。
+2026-08-01 的 M0 退出审计已通过：基础设施冒烟、迁移、依赖感知健康行为、API
+契约测试、集成测试、`make check` 与文档检查均在本地通过。获准 Push 功能分支后，
+提交 `4a8232309101dc41ed2beb60f2b935b4b984e8b6` 的 Hosted GitHub Actions
+[Run 30685778563](https://github.com/realqingtian/HubCR/actions/runs/30685778563)
+也成功完成，因此 M0-07 已关闭。
 
 ## 6. 里程碑 1——身份、归属与授权
 
@@ -169,10 +170,34 @@ Actions Run，执行它需要明确授权 Push。该外部证据不改变本地�
 | M1-04 | `DONE` | 按确认角色矩阵实现组织与成员关系结构 | G-02、M1-01 | FR-ORG-001–004 |
 | M1-05 | `DONE` | 组织创建/列表/详情与成员管理 API | M1-04 | FR-ORG-001–003 |
 | M1-06 | `DONE` | 集中式授权策略服务与表驱动能力测试 | G-02、M1-03、M1-04 | FR-AUTHZ-001–003 |
-| M1-07 | `READY` | 仓库模型、显式可见性和唯一性约束 | M1-03、M1-04 | FR-REP-001–002 |
-| M1-08 | `PLANNED` | 使用策略检查的仓库创建/列表/详情/更新 API | M1-06、M1-07 | FR-REP-001–005 |
-| M1-09 | `PLANNED` | 类型化前端 API 契约与最小认证/组织/仓库流程 | M1-02、M1-05、M1-08 | 必需流程 1–3 |
-| M1-10 | `PLANNED` | 跨租户隔离集成测试套件 | M1-08 | FR-AUTHZ-001–002 |
+| M1-07 | `DONE` | 仓库模型、显式可见性和唯一性约束 | M1-03、M1-04 | FR-REP-001–002 |
+| M1-08 | `DONE` | 使用策略检查的仓库创建/列表/详情/更新 API | M1-06、M1-07 | FR-REP-001–005 |
+| M1-09 | `DONE` | 类型化前端 API 契约与最小认证/组织/仓库流程 | M1-02、M1-05、M1-08 | 必需流程 1–3 |
+| M1-10 | `DONE` | 跨租户隔离集成测试套件 | M1-08 | FR-AUTHZ-001–002 |
+
+M1-07 在 2026-08-01 的证据：Repository 领域测试覆盖名称规范化和显式可见性；隔离
+PostgreSQL 套件覆盖个人/组织 Namespace、Namespace/名称冲突、数据库检查约束和并发
+唯一性；`make check` 通过后端、前端、文档与密钥检查。
+
+M1-08 在 2026-08-01 的证据：表驱动 Service 测试覆盖个人 Namespace 与组织四角色
+能力矩阵；HTTP 测试覆盖认证、校验、私有资源不披露、跨站拒绝和变更拒绝；隔离
+PostgreSQL HTTP 流程验证 `WRITER` 创建/编辑说明、`OWNER` 修改可见性、无关用户发现
+公开仓库、私有仓库过滤以及原子可见性证据。`make test-integration`、`make check`、
+双语 API 文档与经审查的 OpenAPI 契约均通过。
+
+M1-09 在 2026-08-01 的证据：前端通过 Zod 校验认证、组织、成员和 Repository
+响应，使用携带凭据的类型化客户端，并由 TanStack Query 管理服务端状态。最小工作区
+呈现 Session 加载/登录、明确个人 Namespace、组织/成员以及个人/组织 Repository
+流程，同时区分空数据、拒绝、校验和不可用状态。Vitest 的 7 个测试、生产 Build、
+Playwright 的 3 个稳定浏览器层工作流/失败状态/拒绝测试均通过；人工浏览器检查覆盖未登录、
+已认证、桌面及 390 px 响应式状态。浏览器客户端使用同源 `/api` 请求和 Next.js
+服务端 Rewrite，因此本地运行不依赖当前不存在的跨 Origin CORS Policy。
+
+M1-10 在 2026-08-01 的证据：隔离 PostgreSQL 套件组合真实 GORM Store、服务端
+Session 认证器、Repository Service 与集中 Policy，验证个人 Namespace 隔离、两个
+组织租户隔离、OWNER/ADMIN/WRITER/READER 的变更和发现边界、公开/私有发现、缺失
+Namespace，以及缺失、无效、过期和撤销 Session。完整 `make test-integration` 套件
+通过。
 
 ### M1 强制测试矩阵
 
@@ -191,6 +216,15 @@ Actions Run，执行它需要明确授权 Push。该外部证据不改变本地�
 - 任何受保护操作都不只依赖前端是否显示入口。
 - 授权行为集中在明确的模块契约后，其能力矩阵得到完整测试。
 - 迁移既能升级 M0 Schema，也能从零创建完整的 M1 Schema。
+
+M1 退出审计已于 2026-08-01 通过。`make test-m1-e2e` 创建空的隔离 PostgreSQL，
+应用 GORM/Gormigrate Schema，通过 GORM Auth Store 写入两个仅供测试的身份，并启动
+真实 Go API 与生产模式 Next.js Server。Chromium 随后完成必需流程 1–3：Session
+登录并读取明确个人 Namespace、创建私有 Repository 后改为公开、创建组织并添加
+成员。迁移集成测试还会从 M0 Foundation 迁移状态升级到全部 M1 迁移，并验证重复
+应用。`make test-integration`、`make check`、7 个 Vitest、3 个 Mock Playwright 状态
+测试和真实全栈 Playwright 流程均通过。仅供测试的身份夹具不会作为产品注册或
+Bootstrap 入口呈现；管理员邀请 API 不属于这三个 M1 退出流程。
 
 ## 7. 里程碑 2——Registry 认证与元数据
 
@@ -290,13 +324,14 @@ Actions Run，执行它需要明确授权 Push。该外部证据不改变本地�
 
 根据当前仓库状态，推荐按以下顺序执行：
 
-1. **实现 M1-07：**增加仓库模型，明确可见性与 Namespace/名称唯一约束。
-2. **实现 M1-08：**仓库 API 必须统一经过集中 Policy。
-3. **完成 M0-07 Hosted 证据：**用户授权 Push 后，确认已配置的 GitHub Actions
-   Workflow 通过 `make check` 与隔离 PostgreSQL 测试套件。
+1. **定义 M2-01：**记录 Registry Challenge、Service、Audience、Repository Scope
+   语法、Action 交集、匿名公开行为和 Token TTL。
+2. **评审后实现 M2-02/M2-03：**增加支持轮换的签名和 `/token` 决策边界，且不得把
+   Web Session 当作 Registry 凭据。
+3. **Token 测试通过后再连接 M2-04：**配置 Distribution 与本地 Gateway，并在接入
+   元数据前证明 Repository/Action 精确隔离。
 
-第 3 项属于可独立推进的外部验证任务。Commit 应保持足够小，使一个工作包及其测试
-可一起审查。
+Commit 应保持足够小，使一个工作包及其测试可一起审查。
 
 ## 12. 验证策略
 

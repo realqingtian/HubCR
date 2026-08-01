@@ -66,7 +66,8 @@ Liveness 只反映进程状态。必需的 PostgreSQL 不可访问时，Readines
 
 - `POST /api/v1/auth/login` 接收本地用户名与密码，返回用户与 Session 过期时间。
   不透明 Session Secret 只通过 `hubcr_session` Cookie 返回，绝不进入 JSON。
-- `GET /api/v1/auth/me` 返回已认证用户，否则返回 `401 authentication_failed`。
+- `GET /api/v1/auth/me` 返回已认证用户及显式 `personal_namespace`，否则返回
+  `401 authentication_failed`。
 - `POST /api/v1/auth/logout` 撤销服务端 Session、清除 Cookie；Cookie 缺失或未知时
   仍保持幂等。
 - Cookie 使用 `HttpOnly`、`SameSite=Lax`、Path `/` 与显式过期时间。`Secure` 只在
@@ -91,6 +92,27 @@ Liveness 只反映进程状态。必需的 PostgreSQL 不可访问时，Readines
   `READER` 不能管理成员；最后一位 `OWNER` 不能被降级或移除。
 - 组织与成员列表遵循统一的 `limit` 加不透明 `cursor` 契约。标记为
   `Sec-Fetch-Site: cross-site` 的成员写请求会被拒绝。
+
+## Repository
+
+所有 Repository 端点当前都要求有效的 `hubcr_session` Cookie，并使用规范路径
+`/api/v1/namespaces/{namespace}/repositories/{repository}`。
+
+- `POST /api/v1/namespaces/{namespace}/repositories` 创建显式为 `PUBLIC` 或 `PRIVATE`
+  的 Repository。个人 Namespace 所有者和组织 `OWNER`、`ADMIN`、`WRITER` 可创建。
+- `GET /api/v1/namespaces/{namespace}/repositories` 返回有界分页。Namespace 之外的
+  调用者只能看到显式 `PUBLIC` Repository；个人所有者和全部组织角色还可发现
+  `PRIVATE` Repository。
+- `GET .../{repository}` 在 Repository 不存在或调用者无权发现私有 Repository 时均
+  返回 `404`，避免泄露私有资源是否存在。
+- `PATCH .../{repository}` 可修改 `description`、`visibility` 或二者。个人所有者与
+  组织 `OWNER`/`ADMIN` 可修改可见性；组织 `WRITER` 可编辑说明但不能修改可见性；
+  `READER` 不能修改 Repository 元数据。
+- 可见性变更会原子更新 `visibility_updated_by_user_id`、
+  `visibility_updated_at` 与 `updated_at`；仅修改说明时保持可见性证据不变。
+- Namespace 与 Repository 名称都是最长 64 Byte、规范化为小写的 OCI 路径组件；
+  Repository 名称在 Namespace 内唯一。Repository 列表使用统一的 `limit` 加不透明
+  `cursor` 契约；标记为 `Sec-Fetch-Site: cross-site` 的变更请求会被拒绝。
 
 ## OpenAPI 所有权
 

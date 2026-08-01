@@ -23,6 +23,9 @@ Gormigrate 提供普通 `AutoMigrate` 不具备的显式迁移 ID 与校验，�
   和终止状态。`000003_personal_namespaces` 增加全局唯一且规范化的个人 Namespace，
   强制每个用户只能拥有一个，并在事务中回填兼容的已有用户。
   `000004_organizations` 将 Namespace 归属扩展到组织，并增加组织及四角色成员关系。
+  `000005_repositories` 增加归属于 Namespace 的 Repository 身份、没有数据库默认值的
+  显式 `PUBLIC`/`PRIVATE` 可见性、创建者与初始可见性变更证据，以及 Namespace/名称
+  唯一性。
 
 在仓库根目录针对配置的数据库执行迁移：
 
