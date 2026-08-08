@@ -30,13 +30,22 @@ Repository Visibility 与 Detail API 返回的调用者专属
 凭据。每个 Tag 都链接到精确 Digest 详情；Index 详情区分未知 Descriptor Set 与已确认
 空集合。权限拒绝、API 失败、
 连接不可用、Loading 与 Empty 均明确展示。页面不会根据 Artifact 元数据推断 Scan、
-Signature、密码学有效性或 Trust 状态。
+Signature、密码学有效性或 Trust 状态。经授权、绑定 Digest 的安全面板会消费后端契约，
+并区分 Loading、Absent、Queued、Running、Failed、Stale、Unavailable、Unsigned、
+Invalid、Unverified、Untrusted 与 Trusted 状态。缺失证据绝不会被展示为扫描干净或
+签名可信。
 
 浏览器请求使用同源 `/api` 路径。在本地开发和独立 Next.js 运行模式下，
 `HUBCR_CONTROL_PLANE_URL` 选择服务端 Rewrite 目标，默认值为
 `http://127.0.0.1:8080`；部署 Gateway 也可以直接路由 `/api`。
 `NEXT_PUBLIC_API_BASE_URL` 仅作为已启用 CORS 端点的可选公开覆盖项，绝不能包含
 Secret。
+
+生产镜像使用当前安装版 Next.js 的 Standalone Output 契约，并以非 Root 用户运行。
+在获批单机 Compose 拓扑中，Gateway 通过同一 HTTPS Origin 路由 Web 与 `/api/`
+流量；Web Container 不发布宿主端口。用户可见行为汇总在
+[MVP 用户指南](../docs/user-guide.zh-CN.md)，并受
+[发布限制](../docs/release-limitations.zh-CN.md)约束。
 
 ```bash
 bun run typecheck
@@ -48,7 +57,7 @@ bun run test:e2e
 
 Playwright 套件会构建并启动生产模式 Web Server，再通过浏览器层控制面 Mock 稳定
 验证工作流、动态路由、Artifact Descriptor Knowledge、Visibility/Capability Quick-start、
-不披露、拒绝/失败状态与移动宽度。持久化与授权证据由后端 PostgreSQL 集成套件单独
+安全状态、不披露、拒绝/失败状态、键盘与移动宽度。持久化与授权证据由后端 PostgreSQL 集成套件单独
 验证。
 
 在仓库根目录运行 `make test-m1-e2e` 还会创建隔离 PostgreSQL，通过 GORM 写入仅供

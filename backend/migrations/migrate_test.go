@@ -26,10 +26,10 @@ func TestMigrationsHaveUniqueOrderedIDs(t *testing.T) {
 	}
 }
 
-func TestArtifactMetadataMigrationIsCurrent(t *testing.T) {
+func TestSignatureTrustMigrationIsCurrent(t *testing.T) {
 	migrations := all()
-	if got := migrations[len(migrations)-1].ID; got != "000006_artifact_metadata" {
-		t.Fatalf("last migration ID = %q, want 000006_artifact_metadata", got)
+	if got := migrations[len(migrations)-1].ID; got != "000009_signature_trust" {
+		t.Fatalf("last migration ID = %q, want 000009_signature_trust", got)
 	}
 }
 
@@ -70,6 +70,8 @@ func TestApplyM0UpgradeRepeatAndUnknownMigrationDetection(t *testing.T) {
 		t.Fatalf("second Apply() error = %v", err)
 	}
 	assertArtifactMetadataSchema(t, pool)
+	assertJobFoundationSchema(t, pool)
+	assertSignatureTrustSchema(t, pool)
 
 	var count int64
 	if err := pool.ORM().Table(options.TableName).Count(&count).Error; err != nil {
@@ -92,6 +94,56 @@ func TestApplyM0UpgradeRepeatAndUnknownMigrationDetection(t *testing.T) {
 	}
 	if err := Apply(ctx, testTransaction); err == nil {
 		t.Fatal("Apply() with unknown migration error = nil, want an error")
+	}
+}
+
+func assertSignatureTrustSchema(t *testing.T, pool *postgres.Pool) {
+	t.Helper()
+	migrator := pool.ORM().Migrator()
+	for name, record := range map[string]any{
+		"trust_policies":           &trustPolicyMigrationRecord{},
+		"trust_policy_public_keys": &trustPolicyPublicKeyMigrationRecord{},
+		"trust_policy_identities":  &trustPolicyIdentityMigrationRecord{},
+		"signature_workflows":      &signatureWorkflowMigrationRecord{},
+		"signature_verifications":  &signatureVerificationMigrationRecord{},
+		"signature_evidence":       &signatureEvidenceMigrationRecord{},
+		"cosign_tool_state":        &cosignToolStateMigrationRecord{},
+	} {
+		if !migrator.HasTable(record) {
+			t.Fatalf("signature trust table %q is missing", name)
+		}
+	}
+	for record, names := range map[any][]string{
+		&trustPolicyMigrationRecord{}:       {"ck_trust_policies_version", "fk_trust_policies_namespace", "fk_trust_policies_creator"},
+		&signatureWorkflowMigrationRecord{}: {"ck_signature_workflows_policy_version", "fk_signature_workflows_artifact", "fk_signature_workflows_policy", "fk_signature_workflows_job"},
+		&signatureEvidenceMigrationRecord{}: {"ck_signature_evidence_digest", "ck_signature_evidence_kind", "ck_signature_evidence_signer", "ck_signature_evidence_state"},
+	} {
+		for _, name := range names {
+			if !migrator.HasConstraint(record, name) {
+				t.Fatalf("signature trust constraint %q is missing", name)
+			}
+		}
+	}
+}
+
+func assertJobFoundationSchema(t *testing.T, pool *postgres.Pool) {
+	t.Helper()
+	migrator := pool.ORM().Migrator()
+	if !migrator.HasTable(&jobMigrationRecord{}) {
+		t.Fatal("job foundation table is missing")
+	}
+	for _, name := range []string{
+		"ck_jobs_kind", "ck_jobs_intent_key", "ck_jobs_payload", "ck_jobs_state",
+		"ck_jobs_attempts", "ck_jobs_error_code", "ck_jobs_timestamps", "ck_jobs_lifecycle",
+	} {
+		if !migrator.HasConstraint(&jobMigrationRecord{}, name) {
+			t.Fatalf("job foundation constraint %q is missing", name)
+		}
+	}
+	for _, name := range []string{"uq_jobs_intent_key", "idx_jobs_claim_queued", "idx_jobs_claim_expired"} {
+		if !migrator.HasIndex(&jobMigrationRecord{}, name) {
+			t.Fatalf("job foundation index %q is missing", name)
+		}
 	}
 }
 

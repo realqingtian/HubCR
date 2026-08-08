@@ -1,6 +1,8 @@
 # Local configuration
 .env
 !.env.example
+.env.production
+!.env.production.example
 
 # Go
 backend/bin/

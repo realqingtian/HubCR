@@ -26,7 +26,15 @@ Gormigrate 提供普通 `AutoMigrate` 不具备的显式迁移 ID 与校验，�
   `000005_repositories` 增加归属于 Namespace 的 Repository 身份、没有数据库默认值的
   显式 `PUBLIC`/`PRIVATE` 可见性、创建者与初始可见性变更证据，以及 Namespace/名称
   唯一性。`000006_artifact_metadata` 增加 Repository 级不可变 Artifact Digest、当前
-  Tag 引用、有序 Manifest Descriptor，以及防止跨 Repository 引用的复合外键。
+  Tag 引用、有序 Manifest Descriptor，以及防止跨 Repository 引用的复合外键。G-03
+  关闭后，`000007_job_foundation` 增加持久化唯一 Intent、原子 Claim Index、租约、
+  尝试次数、重试调度、最终 Dead-letter 状态与生命周期约束。
+  `000008_security_scan` 为每个 Repository Artifact 增加一个绑定 Digest 的 Workflow、
+  精确 Scan/SBOM Job 引用、规范化漏洞 Finding、带版本的扫描器/数据库证据、CycloneDX
+  JSON、工具状态新鲜度，以及严格的跨 Repository 外键。
+  `000009_signature_trust` 增加不可变 Namespace Trust Policy 版本、精确公钥与 Keyless
+  身份规则、绑定 Digest 的 Signature Workflow/Job、密码学与信任证据、当前结果选择及
+  历史结果。
 
 在仓库根目录针对配置的数据库执行迁移：
 

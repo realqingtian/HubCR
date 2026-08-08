@@ -218,3 +218,116 @@ func TestLoadWorkerRejectsInvalidInterval(t *testing.T) {
 		t.Fatal("LoadWorker() error = nil, want an error")
 	}
 }
+
+func TestLoadWorkerDefaults(t *testing.T) {
+	for _, key := range []string{
+		"HUBCR_DATABASE_URL", "HUBCR_DATABASE_CONNECT_TIMEOUT", "HUBCR_DATABASE_HEALTH_TIMEOUT",
+		"HUBCR_DATABASE_MAX_CONNECTIONS", "HUBCR_WORKER_POLL_INTERVAL",
+		"HUBCR_WORKER_LEASE_DURATION", "HUBCR_WORKER_JOB_TIMEOUT",
+		"HUBCR_WORKER_SHUTDOWN_TIMEOUT", "HUBCR_WORKER_RETRY_BASE",
+		"HUBCR_WORKER_RETRY_MAX", "HUBCR_WORKER_MAX_CONCURRENCY",
+		"HUBCR_SECURITY_SCANNER_ENABLED", "HUBCR_TRIVY_BINARY", "HUBCR_TRIVY_CACHE_DIR",
+		"HUBCR_COSIGN_BINARY", "HUBCR_COSIGN_SCRATCH_DIR",
+		"HUBCR_SCANNER_REGISTRY_HOST", "HUBCR_SCANNER_REGISTRY_INSECURE",
+		"HUBCR_SCANNER_REGISTRY_TOKEN_TTL", "HUBCR_REGISTRY_SERVICE", "HUBCR_REGISTRY_ISSUER",
+		"HUBCR_REGISTRY_TOKEN_PRIVATE_KEY_FILE", "HUBCR_SECURITY_REPAIR_INTERVAL",
+		"HUBCR_SECURITY_REPAIR_BATCH",
+	} {
+		t.Setenv(key, "")
+	}
+	cfg, err := LoadWorker()
+	if err != nil {
+		t.Fatalf("LoadWorker() error = %v", err)
+	}
+	if cfg.PollInterval != 5*time.Second || cfg.LeaseDuration != 15*time.Minute ||
+		cfg.JobTimeout != 10*time.Minute || cfg.ShutdownTimeout != 20*time.Second ||
+		cfg.RetryBase != 5*time.Second || cfg.RetryMax != 5*time.Minute ||
+		cfg.MaxConcurrency != 2 || cfg.Database.MaxConnections != 10 || cfg.Scanner.Enabled ||
+		cfg.Scanner.Binary != "trivy" || cfg.Scanner.CacheDir != "/tmp/hubcr-trivy" ||
+		cfg.Scanner.CosignBinary != "cosign" || cfg.Scanner.CosignScratchDir != "/tmp/hubcr-cosign" ||
+		cfg.Scanner.RepairInterval != 30*time.Second || cfg.Scanner.RepairBatch != 100 {
+		t.Fatalf("Worker defaults = %#v", cfg)
+	}
+}
+
+func TestLoadWorkerSecurityScannerConfiguration(t *testing.T) {
+	t.Setenv("HUBCR_SECURITY_SCANNER_ENABLED", "true")
+	t.Setenv("HUBCR_TRIVY_BINARY", "/usr/local/bin/trivy")
+	t.Setenv("HUBCR_TRIVY_CACHE_DIR", "/var/lib/hubcr/trivy")
+	t.Setenv("HUBCR_COSIGN_BINARY", "/usr/local/bin/cosign")
+	t.Setenv("HUBCR_COSIGN_SCRATCH_DIR", "/var/lib/hubcr/cosign")
+	t.Setenv("HUBCR_SCANNER_REGISTRY_HOST", "registry:5000")
+	t.Setenv("HUBCR_SCANNER_REGISTRY_INSECURE", "true")
+	t.Setenv("HUBCR_SCANNER_REGISTRY_TOKEN_TTL", "3m")
+	t.Setenv("HUBCR_REGISTRY_SERVICE", "hubcr-registry")
+	t.Setenv("HUBCR_REGISTRY_ISSUER", "hubcr-token-service")
+	t.Setenv("HUBCR_REGISTRY_TOKEN_PRIVATE_KEY_FILE", "/run/hubcr/registry-auth/private.pem")
+	t.Setenv("HUBCR_SECURITY_REPAIR_INTERVAL", "15s")
+	t.Setenv("HUBCR_SECURITY_REPAIR_BATCH", "50")
+	cfg, err := LoadWorker()
+	if err != nil {
+		t.Fatalf("LoadWorker() error = %v", err)
+	}
+	if !cfg.Scanner.Enabled || cfg.Scanner.RegistryHost != "registry:5000" ||
+		!cfg.Scanner.RegistryInsecure || cfg.Scanner.RegistryTokenTTL != 3*time.Minute ||
+		cfg.Scanner.CosignBinary != "/usr/local/bin/cosign" ||
+		cfg.Scanner.CosignScratchDir != "/var/lib/hubcr/cosign" ||
+		cfg.Scanner.RegistryPrivateKey != "/run/hubcr/registry-auth/private.pem" ||
+		cfg.Scanner.RepairInterval != 15*time.Second || cfg.Scanner.RepairBatch != 50 {
+		t.Fatalf("Scanner = %#v", cfg.Scanner)
+	}
+}
+
+func TestLoadWorkerRejectsUnsafeExecutionBounds(t *testing.T) {
+	for _, test := range []struct {
+		name string
+		env  map[string]string
+	}{
+		{
+			name: "lease does not outlive job timeout",
+			env: map[string]string{
+				"HUBCR_WORKER_LEASE_DURATION": "1m", "HUBCR_WORKER_JOB_TIMEOUT": "1m",
+			},
+		},
+		{
+			name: "retry cap below base",
+			env: map[string]string{
+				"HUBCR_WORKER_RETRY_BASE": "1m", "HUBCR_WORKER_RETRY_MAX": "30s",
+			},
+		},
+		{
+			name: "excessive concurrency",
+			env: map[string]string{
+				"HUBCR_WORKER_MAX_CONCURRENCY": "65",
+			},
+		},
+		{
+			name: "scanner relative key",
+			env: map[string]string{
+				"HUBCR_SECURITY_SCANNER_ENABLED":        "true",
+				"HUBCR_REGISTRY_TOKEN_PRIVATE_KEY_FILE": "private.pem",
+			},
+		},
+		{
+			name: "scanner host has scheme",
+			env: map[string]string{
+				"HUBCR_SECURITY_SCANNER_ENABLED":        "true",
+				"HUBCR_SCANNER_REGISTRY_HOST":           "http://registry:5000",
+				"HUBCR_REGISTRY_TOKEN_PRIVATE_KEY_FILE": "/tmp/private.pem",
+			},
+		},
+		{
+			name: "repair batch too large",
+			env:  map[string]string{"HUBCR_SECURITY_REPAIR_BATCH": "501"},
+		},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			for key, value := range test.env {
+				t.Setenv(key, value)
+			}
+			if _, err := LoadWorker(); err == nil {
+				t.Fatal("LoadWorker() error = nil")
+			}
+		})
+	}
+}

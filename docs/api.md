@@ -5,6 +5,13 @@
 These conventions apply to the JSON control-plane API under `/api/v1`. Registry
 protocol endpoints `/token` and `/v2/` keep their protocol-specific contracts.
 
+In the supported single-host Compose deployment, callers use one operator-supplied
+HTTPS origin. The gateway routes `/api/` to the control plane, `/token` to the scoped
+token endpoint, `/v2/` to Distribution, and all other paths to the Web application.
+Only the gateway publishes a host port; direct API and data-service endpoints remain
+private. See the [operator guide](operator-guide.md), [user guide](user-guide.md), and
+[release limitations](release-limitations.md).
+
 ## Transport
 
 - Request and response bodies use `application/json`.
@@ -179,6 +186,35 @@ under `/api/v1/namespaces/{namespace}/repositories/{repository}`.
   when unavailable. The API does not invent zero values or missing Platform facts.
 - These endpoints are read-only. Distribution continues to own `/v2/`, and deletion,
   retention, Tag history, and garbage collection remain outside M2-07.
+
+## Artifact security
+
+`GET .../artifacts/{digest}/security` requires a valid session and reuses repository
+discovery authorization before reading security storage. A missing Artifact and an
+inaccessible private repository both return `404 not_found` without disclosing private
+existence.
+
+The response keeps scan, SBOM, and signature verification state separate. Scan and
+SBOM each contain `state`, `attempts`,
+and `updated_at`; supported states are `QUEUED`, `RUNNING`, `COMPLETED`, `FAILED`, and
+`STALE`. Failed work may include a machine-readable `error_code`. Completed or stale
+scan evidence includes the Trivy and vulnerability-database versions, database
+timestamps, finding count, and severity counts. A persisted SBOM includes
+`completed_at` and `format: CYCLONEDX_JSON`. Queued, running, failed, or missing
+evidence never receives invented completion fields or successful zero values.
+
+`signature.state` is `ABSENT` when no trust-policy verification workflow exists.
+Otherwise it reports the durable job state and fixed `policy_id`/`policy_version`.
+Completed or stale verification includes the Cosign version, completion time, and
+zero or more digest-identified signature/attestation evidence records. Each record
+separates `cryptographic_state` (`VALID`, `INVALID`, `UNVERIFIED`, or `UNAVAILABLE`)
+from `trust_state` (`TRUSTED`, `UNTRUSTED`, or `NOT_EVALUATED`) and includes the
+backend reason plus exact public-key fingerprint or keyless issuer/subject evidence
+when available. An empty completed evidence array truthfully means no signature or
+attestation was discovered. `STALE` means the evidence belongs to an older immutable
+policy version and is not a current trust conclusion.
+
+This endpoint exposes informational state only; it does not block Push or Pull.
 
 ## OpenAPI ownership
 

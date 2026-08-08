@@ -2,6 +2,7 @@
 
 import { useQuery } from "@tanstack/react-query";
 import Link from "next/link";
+import { ArtifactSecurityPanel } from "@/features/security/artifact-security-panel";
 import { friendlyError, PanelMessage } from "@/features/shared/feedback";
 import { APIError, getArtifact, type Artifact, type ManifestDescriptor } from "@/lib/api/client";
 
@@ -29,7 +30,7 @@ export function ArtifactDetailPage({ digest, namespace, repository }: Readonly<{
       <div className="mt-5">
         {detail.isPending ? <PanelMessage title="Loading Artifact" detail="Reading immutable Digest metadata from the control plane." /> : null}
         {detail.isError ? <ArtifactFailure error={detail.error} retry={() => void detail.refetch()} /> : null}
-        {detail.data ? <ArtifactDetail artifact={detail.data} /> : null}
+        {detail.data ? <ArtifactDetail artifact={detail.data} namespace={namespace} repository={repository} /> : null}
       </div>
     </div>
   );
@@ -45,7 +46,7 @@ function ArtifactFailure({ error, retry }: Readonly<{ error: unknown; retry: () 
   );
 }
 
-function ArtifactDetail({ artifact }: Readonly<{ artifact: Artifact }>) {
+function ArtifactDetail({ artifact, namespace, repository }: Readonly<{ artifact: Artifact; namespace: string; repository: string }>) {
   return (
     <div className="space-y-6">
       <section className="rounded-3xl bg-slate-950 px-6 py-7 text-white shadow-sm sm:px-8">
@@ -68,10 +69,7 @@ function ArtifactDetail({ artifact }: Readonly<{ artifact: Artifact }>) {
       </section>
 
       <DescriptorSection artifact={artifact} />
-
-      <section className="rounded-2xl border border-dashed border-slate-300 bg-slate-50 p-5 text-sm leading-6 text-slate-600">
-        Scan, signature presence, cryptographic validity, and policy trust are not available in this web build and are not inferred from Artifact metadata.
-      </section>
+      <ArtifactSecurityPanel digest={artifact.digest} namespace={namespace} repository={repository} />
     </div>
   );
 }

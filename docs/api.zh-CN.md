@@ -5,6 +5,12 @@
 这些约定适用于 `/api/v1` 下的 JSON 控制面 API。Registry 协议端点 `/token` 与
 `/v2/` 保持各自协议契约。
 
+在受支持的单机 Compose 部署中，调用者使用运维人员提供的单一 HTTPS Origin。
+Gateway 把 `/api/` 路由到控制面、`/token` 路由到 Scoped Token Endpoint、`/v2/`
+路由到 Distribution，其余路径路由到 Web 应用。只有 Gateway 发布宿主端口；API 与
+数据服务直连端点保持私有。参见[运维指南](operator-guide.zh-CN.md)、
+[用户指南](user-guide.zh-CN.md)与[发布限制](release-limitations.zh-CN.md)。
+
 ## 传输
 
 - 请求与响应 Body 使用 `application/json`。
@@ -158,6 +164,31 @@ Liveness 只反映进程状态。必需的 PostgreSQL 不可访问时，Readines
   虚构零值或缺失的 Platform 事实。
 - 这些 Endpoint 只读。Distribution 继续负责 `/v2/`；删除、保留、Tag 历史和垃圾
   回收仍不属于 M2-07。
+
+## Artifact 安全状态
+
+`GET .../artifacts/{digest}/security` 要求有效 Session，并在读取安全存储前复用
+Repository Discovery 授权。Artifact 不存在与无权访问 Private Repository 均返回
+`404 not_found`，不披露私有资源是否存在。
+
+Response 分开表达 Scan、SBOM 与签名验证状态。Scan 与 SBOM 都包含 `state`、`attempts`
+与 `updated_at`；
+支持 `QUEUED`、`RUNNING`、`COMPLETED`、`FAILED` 和 `STALE`。失败工作可包含机器可读
+`error_code`。Completed 或 Stale Scan 证据包含 Trivy/漏洞数据库版本、数据库时间戳、
+Finding 数量与 Severity 计数。已持久化 SBOM 包含 `completed_at` 与
+`format: CYCLONEDX_JSON`。Queued、Running、Failed 或证据缺失时不会虚构完成字段或
+成功零值。
+
+不存在 Trust Policy 验证 Workflow 时，`signature.state` 为 `ABSENT`。否则返回持久化
+Job 状态以及固定的 `policy_id`/`policy_version`。Completed 或 Stale 验证还包含 Cosign
+版本、完成时间，以及零条或多条由 Digest 标识的 Signature/Attestation Evidence。每条
+Evidence 将 `cryptographic_state`（`VALID`、`INVALID`、`UNVERIFIED` 或 `UNAVAILABLE`）
+与 `trust_state`（`TRUSTED`、`UNTRUSTED` 或 `NOT_EVALUATED`）分开，并在可用时包含后端
+Reason、精确公钥 Fingerprint 或 Keyless Issuer/Subject。Completed 且 Evidence 数组为空，
+如实表示没有发现 Signature 或 Attestation。`STALE` 表示证据属于旧的不可变 Policy
+版本，不是当前信任结论。
+
+该 Endpoint 只展示信息，不阻断 Push/Pull。
 
 ## OpenAPI 所有权
 

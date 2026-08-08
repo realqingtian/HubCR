@@ -21,3 +21,16 @@ product owner to confirm the selected option and approval date.
 - [D-004 Organization roles](d-004-organization-roles.md)
 - [D-005 Grant inheritance](d-005-grant-inheritance.md)
 - [D-006 Public pull](d-006-public-pull.md)
+
+## M3 operations decision session
+
+- [D-009 Production deployment](d-009-production-deployment.md)
+- [D-010 Operations policy](d-010-operations-policy.md) — accepted only for the MVP
+  backup and restore subset; lifecycle policy remains deferred
+
+## M4 security decision session
+
+- [D-007 Security enforcement](d-007-security-enforcement.md) — `ACCEPTED`:
+  informational asynchronous scanning without pull blocking
+- [D-008 Signature trust](d-008-signature-trust.md) — `ACCEPTED`: versioned
+  namespace policies combining public-key and exact keyless identities

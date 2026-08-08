@@ -46,5 +46,8 @@ func all() []*gormigrate.Migration {
 		organizationsMigration(),
 		repositoriesMigration(),
 		artifactMetadataMigration(),
+		jobFoundationMigration(),
+		securityScanMigration(),
+		signatureTrustMigration(),
 	}
 }

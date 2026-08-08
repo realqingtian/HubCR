@@ -9,6 +9,8 @@ const manifestDigest = "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
 const unknownIndexDigest = "sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb";
 const emptyIndexDigest = "sha256:cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc";
 const missingDigest = "sha256:dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd";
+const signatureDigest = "sha256:eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee";
+const keyFingerprint = "sha256:ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff";
 const corsHeaders = {
   "Access-Control-Allow-Credentials": "true",
   "Access-Control-Allow-Headers": "Content-Type",
@@ -77,6 +79,7 @@ async function installControlPlaneMock(
     artifactMode?: ArtifactMode;
     denyRepositoryCreate?: boolean;
     repositoryCapabilities?: { can_pull: boolean; can_push: boolean };
+    securityResponse?: unknown;
     seedRepository?: boolean;
     seedVisibility?: "PUBLIC" | "PRIVATE";
   }> = {},
@@ -203,8 +206,9 @@ async function installControlPlaneMock(
     }
     const artifactListMatch = path.match(/^\/api\/v1\/namespaces\/([^/]+)\/repositories\/([^/]+)\/artifacts$/);
     const tagListMatch = path.match(/^\/api\/v1\/namespaces\/([^/]+)\/repositories\/([^/]+)\/tags$/);
+    const artifactSecurityMatch = path.match(/^\/api\/v1\/namespaces\/([^/]+)\/repositories\/([^/]+)\/artifacts\/([^/]+)\/security$/);
     const artifactDetailMatch = path.match(/^\/api\/v1\/namespaces\/([^/]+)\/repositories\/([^/]+)\/artifacts\/([^/]+)$/);
-    if ((artifactListMatch || tagListMatch || artifactDetailMatch) && request.method() === "GET") {
+    if ((artifactListMatch || tagListMatch || artifactSecurityMatch || artifactDetailMatch) && request.method() === "GET") {
       const mode = options.artifactMode ?? "success";
       if (mode === "forbidden") {
         await fulfill(route, {
@@ -236,6 +240,16 @@ async function installControlPlaneMock(
             updated_at: timestamp,
           }],
           meta: { limit: 100 },
+        });
+        return;
+      }
+      if (artifactSecurityMatch) {
+        const digest = decodeURIComponent(artifactSecurityMatch[3] ?? "");
+        await fulfill(route, options.securityResponse ?? {
+          digest,
+          scan: { state: "QUEUED", attempts: 0, updated_at: timestamp },
+          sbom: { state: "QUEUED", attempts: 0, updated_at: timestamp },
+          signature: { state: "ABSENT", evidence: [] },
         });
         return;
       }
@@ -295,7 +309,7 @@ test("signs in and completes the personal and organization ownership flows", asy
   await expect(page).toHaveURL(new RegExp(`/artifacts/sha256(?:%3A|:)${"a".repeat(64)}$`, "i"));
   await expect(page.getByRole("heading", { name: manifestDigest })).toBeVisible();
   await expect(page.getByText("Manifest Artifact", { exact: true })).toBeVisible();
-  await expect(page.getByText(/Scan, signature presence, cryptographic validity/)).toBeVisible();
+  await expect(page.getByText("Verification not configured", { exact: true })).toBeVisible();
   await page.getByLabel("Breadcrumb").getByRole("link", { name: "backend" }).click();
   await page.getByLabel("Breadcrumb").getByRole("link", { name: "Overview" }).click();
   await expect(page.getByRole("heading", { name: "Control-plane workspace" })).toBeVisible();
@@ -422,4 +436,60 @@ test("keeps authenticated navigation usable at a mobile width", async ({ page })
   await expect(page.getByRole("button", { name: "Sign out" })).toBeVisible();
   const horizontalOverflow = await page.evaluate(() => document.documentElement.scrollWidth > document.documentElement.clientWidth);
   expect(horizontalOverflow).toBe(false);
+});
+
+test("renders digest-bound security trust states without mobile overflow", async ({ page }) => {
+  await page.setViewportSize({ width: 390, height: 844 });
+  await installControlPlaneMock(page, true, {
+    securityResponse: {
+      digest: manifestDigest,
+      scan: {
+        state: "COMPLETED", attempts: 1, updated_at: timestamp, completed_at: timestamp,
+        tool: {
+          name: "TRIVY", scanner_version: "0.72.0", database_schema_version: 2,
+          database_updated_at: timestamp, database_downloaded_at: timestamp,
+        },
+        finding_count: 2,
+        severity_counts: { HIGH: 1, MEDIUM: 1 },
+      },
+      sbom: {
+        state: "COMPLETED", attempts: 1, updated_at: timestamp, completed_at: timestamp,
+        format: "CYCLONEDX_JSON",
+      },
+      signature: {
+        state: "COMPLETED", attempts: 1, updated_at: timestamp,
+        policy_id: "55555555-5555-4555-8555-555555555555", policy_version: 2,
+        cosign_version: "v3.0.6", completed_at: timestamp,
+        evidence: [
+          {
+            kind: "SIGNATURE", signature_digest: signatureDigest,
+            signer_type: "PUBLIC_KEY", key_fingerprint: keyFingerprint,
+            cryptographic_state: "VALID", trust_state: "TRUSTED", reason: "TRUSTED_PUBLIC_KEY",
+          },
+          {
+            kind: "ATTESTATION", signature_digest: missingDigest,
+            signer_type: "KEYLESS", oidc_issuer: "https://issuer.example", subject: "release@example.com",
+            cryptographic_state: "VALID", trust_state: "UNTRUSTED", reason: "VALID_UNTRUSTED_SIGNER",
+          },
+          {
+            kind: "SIGNATURE", signature_digest: unknownIndexDigest,
+            signer_type: "PUBLIC_KEY", key_fingerprint: keyFingerprint,
+            cryptographic_state: "INVALID", trust_state: "NOT_EVALUATED", reason: "SIGNATURE_INVALID",
+          },
+        ],
+      },
+    },
+  });
+  await page.goto(`/namespaces/owner/repositories/backend/artifacts/${manifestDigest}`);
+
+  await expect(page.getByRole("heading", { name: "Supply-chain security" })).toBeVisible();
+  await expect(page.getByText("Scan completed", { exact: true })).toBeVisible();
+  await expect(page.getByText("SBOM completed", { exact: true })).toBeVisible();
+  await expect(page.getByText("Trusted", { exact: true })).toBeVisible();
+  await expect(page.getByText("Valid, untrusted", { exact: true })).toBeVisible();
+  await expect(page.getByText("Invalid", { exact: true })).toBeVisible();
+  await page.getByRole("button", { name: "Refresh" }).focus();
+  await page.keyboard.press("Enter");
+  await expect(page.getByText("Verification completed", { exact: true })).toBeVisible();
+  expect(await page.evaluate(() => document.documentElement.scrollWidth > document.documentElement.clientWidth)).toBe(false);
 });

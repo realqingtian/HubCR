@@ -11,16 +11,19 @@ OCI upload and download behavior is delegated to CNCF Distribution instead of be
 reimplemented.
 
 > [!IMPORTANT]
-> HubCR is in early development. The repository contains a runnable control plane,
+> HubCR is an evidence-backed Registry MVP release candidate. The repository contains a runnable control plane,
 > local-session, organization and repository APIs, a minimal authenticated web
 > workspace, short-lived Registry token issuance, and a token-protected local
 > Distribution gateway. Digest-keyed artifact, manifest/index, and current-tag
 > persistence is connected to authenticated Distribution push events and exposed
 > through policy-protected read APIs. Registry challenge, token-decision, notification,
 > and reconciliation telemetry is available for local operations. Account
-> bootstrap/invitation redemption and supply-chain security features are not
-> implemented yet. Do not use the current version as a production
-> registry.
+> bootstrap/invitation redemption is not implemented yet. Digest-bound asynchronous
+> Trivy scanning, CycloneDX SBOM generation, Cosign signature/attestation verification,
+> versioned namespace trust evaluation, the authorized security-state API, and the
+> truthful Artifact security Web experience are implemented. The supported single-host Compose topology still requires an
+> operator-managed HTTPS reverse proxy, separate secret recovery, encrypted off-host
+> backups, and capacity validation. Read the release limitations before deployment.
 
 ## What HubCR is for
 
@@ -56,15 +59,16 @@ docker push hubcr.io/my-organization/backend:v1.0.0
 | Area | Current status |
 | --- | --- |
 | Go control plane | Runnable service with PostgreSQL lifecycle, dependency-aware health, local sessions, organizations, repositories, Artifact/Tag read APIs, and centralized authorization |
-| Asynchronous worker | Runnable polling scaffold; job persistence is not connected |
-| Web application | Authenticated Next.js shell with overview, namespace, repository, policy-backed Registry quick-start, Artifact/Tag lists, and immutable Digest detail routes plus typed, runtime-validated management flows |
-| OCI data plane | Local gateway routes `/v2/` to token-protected CNCF Distribution backed by MinIO and `/token` to the Go control plane |
-| PostgreSQL and Redis | Local Compose services defined; the control plane connects to PostgreSQL, while Redis is not connected |
+| Asynchronous worker | PostgreSQL-backed bounded worker with unique intents, atomic leased claims, retry/backoff, dead-letter state, cancellation, crash-safe lease recovery, Trivy scan/SBOM, and Cosign verification handlers |
+| Web application | Authenticated Next.js shell with overview, namespace, repository, policy-backed Registry quick-start, Artifact/Tag lists, immutable Digest details, and truthful scan/SBOM/signature/trust evidence plus typed, runtime-validated flows |
+| OCI data plane | Gateway routes `/v2/` to token-protected CNCF Distribution backed by MinIO and `/token` to the Go control plane in local and supported single-host Compose topologies |
+| PostgreSQL and Redis | The control plane and worker connect to durable PostgreSQL; Redis is defined but remains outside authoritative application state |
 | Users, organizations, and repositories | Identity/session APIs, personal namespaces, organization/member APIs, centralized capability policy, policy-protected repository APIs, and the corresponding minimal web workspace exist; account bootstrap/invitation redemption remains pending |
 | Registry token service | Feature-gated RS256 token issuance with exact repository/action scopes, JWKS trust and rotation-ready verification |
 | Artifact metadata | Authenticated Distribution push events reconcile repository-scoped immutable digests, manifest/index descriptors, and mutable current tags through GORM; authorized API and Web list/detail views are available |
 | Registry observability | Secret-safe structured challenge/token/notification logs, bounded control-plane counters, and localhost-only Distribution metrics/queue visibility |
-| Trivy and Cosign | Worker boundaries reserved; integrations are pending |
+| Deployment and recovery | Complete digest-pinned single-host Compose topology plus manual PostgreSQL/Registry-object backup, checksum-verified restore, migration, login, private Pull, and Digest consistency rehearsal |
+| Trivy and Cosign | Pinned Trivy 0.72.0 and Cosign 3.0.6 workflows persist digest-bound scan, SBOM, cryptographic validity, signer, and versioned policy-trust evidence; authorized API and Web views keep absent, unavailable, invalid, untrusted, and trusted states distinct |
 
 ## Architecture
 
@@ -125,7 +129,7 @@ HubCR/
 │   ├── features/                Product feature modules
 │   ├── lib/api/                 Typed API client and Zod schemas
 │   └── providers/               Application-wide client providers
-├── deployments/compose/         Local development infrastructure
+├── deployments/compose/         Local infrastructure and single-host deployment
 ├── docs/                        Architecture and development documentation
 ├── AGENTS.md                    Primary repository-wide AI instructions
 ├── .env.example                 Local configuration template
@@ -143,8 +147,8 @@ HubCR/
 | Cache and coordination | Redis |
 | OCI registry | CNCF Distribution |
 | Object storage | S3-compatible storage; MinIO for local development |
-| Vulnerability scanning | Trivy, planned asynchronous integration |
-| Signatures and attestations | Cosign, planned asynchronous integration |
+| Vulnerability scanning | Trivy 0.72.0, pinned asynchronous integration |
+| Signatures and attestations | Cosign 3.0.6, pinned asynchronous verification |
 | Local orchestration | Docker Compose |
 | Tests and validation | Go test, Go vet, Vitest, ESLint, TypeScript, Next.js build |
 
@@ -253,6 +257,14 @@ make infra-down
 | `make test-m1-e2e` | Run M1 journeys 1–3 through real PostgreSQL, Go API, Next.js, and Chromium |
 | `make test-m2-registry-e2e` | Run isolated real Docker push/pull and Registry authorization checks |
 | `make test-m3-artifact-e2e` | Run the real Distribution push-to-Web Artifact discovery journey in Chromium |
+| `make prod-config` | Validate the protected single-host production Compose configuration |
+| `make prod-build` | Build the API/worker/migration and standalone Web images |
+| `make prod-up` | Start dependencies, migrate, and wait for the complete production topology |
+| `make prod-maintenance-stop` | Stop application and OCI write services for maintenance |
+| `make prod-backup` | Create a confirmed maintenance-window PostgreSQL and Registry-object backup |
+| `make prod-restore` | Explicitly replace data, verify checksums, and apply current migrations |
+| `make test-m3-backup-restore-e2e` | Rehearse isolated production build, backup, key rotation, restore, login, private Pull, and Digest consistency |
+| `make test-m4-security-e2e` | Verify real Push, Trivy/SBOM, worker restart/retry, Cosign trust/invalid/unsigned states, policy re-evaluation, and version evidence |
 | `make check-docs` | Validate bilingual Markdown pairs, links, whitespace, and final newlines |
 | `make check-secrets` | Scan tracked text for high-confidence credential patterns |
 | `make check-security-config` | Enforce loopback ports, generated event secrets, and route-scoped proxy timeouts |
@@ -283,6 +295,22 @@ Run `make check` before requesting review or committing a completed change.
 | `HUBCR_REGISTRY_TOKEN_JWKS_FILE` | none | Absolute path to the trusted public JWKS containing the active and optional retiring keys |
 | `HUBCR_REGISTRY_EVENT_TOKEN` | generated local secret | Shared Distribution-event secret; generated under ignored `.data/` for Make workflows |
 | `HUBCR_WORKER_POLL_INTERVAL` | `5s` | Worker polling interval |
+| `HUBCR_WORKER_LEASE_DURATION` | `15m` | Exclusive PostgreSQL job lease; must exceed the job timeout |
+| `HUBCR_WORKER_JOB_TIMEOUT` | `10m` | Per-attempt handler timeout |
+| `HUBCR_WORKER_SHUTDOWN_TIMEOUT` | `20s` | Bound for waiting on canceled active handlers during shutdown |
+| `HUBCR_WORKER_RETRY_BASE` | `5s` | Initial deterministic retry backoff |
+| `HUBCR_WORKER_RETRY_MAX` | `5m` | Maximum deterministic retry backoff |
+| `HUBCR_WORKER_MAX_CONCURRENCY` | `2` | Per-worker active job limit; maximum accepted value is `64` |
+| `HUBCR_SECURITY_SCANNER_ENABLED` | `false` | Enable Trivy scan/SBOM handlers; the production Compose example enables them |
+| `HUBCR_TRIVY_BINARY` | `trivy` | Trivy executable path |
+| `HUBCR_TRIVY_CACHE_DIR` | `/tmp/hubcr-trivy` | Writable Trivy cache; production uses the non-authoritative `trivy-cache` volume |
+| `HUBCR_COSIGN_BINARY` | `cosign` | Cosign executable path |
+| `HUBCR_COSIGN_SCRATCH_DIR` | `/tmp/hubcr-cosign` | Absolute private scratch directory for bounded Cosign operations |
+| `HUBCR_SCANNER_REGISTRY_HOST` | `localhost:5000` | Internal Registry host used by the worker for exact-scope Pulls |
+| `HUBCR_SCANNER_REGISTRY_INSECURE` | `false` | Permit HTTP only for the private Compose Registry network |
+| `HUBCR_SCANNER_REGISTRY_TOKEN_TTL` | `5m` | Short-lived internal exact-repository Pull token lifetime |
+| `HUBCR_SECURITY_REPAIR_INTERVAL` | `30s` | Interval for repairing Artifact-to-security-workflow crash gaps |
+| `HUBCR_SECURITY_REPAIR_BATCH` | `100` | Maximum missing workflows repaired per pass |
 | `HUBCR_CONTROL_PLANE_URL` | `http://127.0.0.1:8080` | Server-side target for the Next.js same-origin `/api` rewrite |
 | `NEXT_PUBLIC_API_BASE_URL` | same origin | Optional browser-visible override for a CORS-enabled endpoint |
 | `POSTGRES_DB` | `hubcr` | Local PostgreSQL database |
@@ -332,16 +360,20 @@ must link to and remain synchronized with its Simplified Chinese counterpart.
 | Distribution event reconciliation | [Event reconciliation](docs/distribution-event-reconciliation.md) | [事件协调](docs/distribution-event-reconciliation.zh-CN.md) |
 | Registry operational observability | [Registry observability](docs/registry-observability.md) | [Registry 可观测性](docs/registry-observability.zh-CN.md) |
 | Registry MVP threat model | [Threat model](docs/security-threat-model.md) | [威胁模型](docs/security-threat-model.zh-CN.md) |
+| MVP operator guide | [Operator guide](docs/operator-guide.md) | [运维指南](docs/operator-guide.zh-CN.md) |
+| MVP user guide | [User guide](docs/user-guide.md) | [用户指南](docs/user-guide.zh-CN.md) |
+| MVP release limitations | [Release limitations](docs/release-limitations.md) | [发布限制](docs/release-limitations.zh-CN.md) |
 | AI instruction hierarchy | [Instructions](AGENTS.md) | [AI 指令](AGENTS.zh-CN.md) |
-| Local infrastructure | [Compose](deployments/compose/README.md) | [本地基础设施](deployments/compose/README.zh-CN.md) |
+| Local infrastructure and deployment | [Compose](deployments/compose/README.md) | [基础设施与部署](deployments/compose/README.zh-CN.md) |
 | Web application | [Web](frontend/README.md) | [Web 应用](frontend/README.zh-CN.md) |
 
 ## Roadmap
 
 1. **Registry MVP:** users, sessions, namespaces, organizations, repositories,
    visibility, scoped tokens, push/pull, tags, and artifact metadata.
-2. **Supply-chain security:** Trivy scans, SBOMs, Cosign discovery and verification,
-   trust policies, and security status pages.
+2. **Supply-chain security:** completed asynchronous Trivy scans, CycloneDX SBOMs,
+   Cosign verification, versioned namespace trust evaluation, and authorized API/Web
+   evidence views; Pull blocking remains deliberately deferred.
 3. **Operations:** robot accounts, access tokens, quotas, audit logs, webhooks,
    deletion, garbage collection, replication, and proxy caching.
 4. **Public service readiness:** email verification, password recovery, MFA, abuse

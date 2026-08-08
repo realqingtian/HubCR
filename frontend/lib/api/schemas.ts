@@ -161,6 +161,110 @@ export const tagListSchema = z.object({
   meta: pageMetaSchema,
 });
 
+export const securityResultStateSchema = z.enum(["QUEUED", "RUNNING", "COMPLETED", "FAILED", "STALE"]);
+export const securityResultSchema = z.object({
+  state: securityResultStateSchema,
+  error_code: z.string().min(1).max(128).optional(),
+  attempts: z.number().int().min(0),
+  updated_at: timestampSchema,
+  completed_at: timestampSchema.optional(),
+  tool: z.object({
+    name: z.literal("TRIVY"),
+    scanner_version: z.string().min(1).max(128),
+    database_schema_version: z.number().int().min(1),
+    database_updated_at: timestampSchema,
+    database_downloaded_at: timestampSchema,
+  }).optional(),
+  finding_count: z.number().int().min(0).optional(),
+  severity_counts: z.record(z.string(), z.number().int().min(0)).optional(),
+  format: z.literal("CYCLONEDX_JSON").optional(),
+});
+
+const securityScanResultSchema = securityResultSchema.superRefine((result, context) => {
+  const hasCompletedEvidence = result.completed_at !== undefined && result.tool !== undefined &&
+    result.finding_count !== undefined && result.severity_counts !== undefined;
+  if ((result.state === "COMPLETED" || result.state === "STALE") && !hasCompletedEvidence) {
+    context.addIssue({ code: "custom", message: "completed scan evidence is required" });
+  }
+  if (result.state === "FAILED" && result.error_code === undefined) {
+    context.addIssue({ code: "custom", message: "failed scan error code is required" });
+  }
+});
+
+const securitySBOMResultSchema = securityResultSchema.superRefine((result, context) => {
+  if ((result.state === "COMPLETED" || result.state === "STALE") &&
+      (result.completed_at === undefined || result.format === undefined)) {
+    context.addIssue({ code: "custom", message: "completed SBOM evidence is required" });
+  }
+  if (result.state === "FAILED" && result.error_code === undefined) {
+    context.addIssue({ code: "custom", message: "failed SBOM error code is required" });
+  }
+});
+
+export const signatureEvidenceSchema = z.object({
+  kind: z.enum(["SIGNATURE", "ATTESTATION"]),
+  signature_digest: artifactDigestSchema,
+  signer_type: z.enum(["PUBLIC_KEY", "KEYLESS", "UNKNOWN"]),
+  key_fingerprint: artifactDigestSchema.optional(),
+  oidc_issuer: z.url().startsWith("https://").optional(),
+  subject: z.string().min(1).max(2048).optional(),
+  cryptographic_state: z.enum(["VALID", "INVALID", "UNVERIFIED", "UNAVAILABLE"]),
+  trust_state: z.enum(["TRUSTED", "UNTRUSTED", "NOT_EVALUATED"]),
+  reason: z.string().min(1).max(128),
+}).superRefine((evidence, context) => {
+  const validTrust = evidence.cryptographic_state === "VALID"
+    ? evidence.trust_state === "TRUSTED" || evidence.trust_state === "UNTRUSTED"
+    : evidence.trust_state === "NOT_EVALUATED";
+  const validSigner = evidence.signer_type === "PUBLIC_KEY"
+    ? evidence.key_fingerprint !== undefined && evidence.oidc_issuer === undefined && evidence.subject === undefined
+    : evidence.signer_type === "KEYLESS"
+      ? evidence.key_fingerprint === undefined && evidence.oidc_issuer !== undefined && evidence.subject !== undefined
+      : evidence.key_fingerprint === undefined && evidence.oidc_issuer === undefined && evidence.subject === undefined && evidence.cryptographic_state !== "VALID";
+  if (!validTrust) context.addIssue({ code: "custom", message: "cryptographic and trust states conflict" });
+  if (!validSigner) context.addIssue({ code: "custom", message: "signer evidence is incomplete or contradictory" });
+});
+
+export const signatureResultSchema = z.object({
+  state: z.enum(["ABSENT", "QUEUED", "RUNNING", "COMPLETED", "FAILED", "STALE"]),
+  error_code: z.string().min(1).max(128).optional(),
+  attempts: z.number().int().min(0).optional(),
+  updated_at: timestampSchema.optional(),
+  policy_id: idSchema.optional(),
+  policy_version: z.number().int().min(1).optional(),
+  cosign_version: z.string().min(1).max(128).optional(),
+  completed_at: timestampSchema.optional(),
+  evidence: z.array(signatureEvidenceSchema),
+}).superRefine((signature, context) => {
+  if (signature.state === "ABSENT") {
+    if (signature.evidence.length !== 0 || signature.policy_id !== undefined || signature.policy_version !== undefined ||
+        signature.updated_at !== undefined || signature.completed_at !== undefined || signature.cosign_version !== undefined) {
+      context.addIssue({ code: "custom", message: "absent verification cannot contain policy or evidence" });
+    }
+    return;
+  }
+  if (signature.policy_id === undefined || signature.policy_version === undefined || signature.updated_at === undefined) {
+    context.addIssue({ code: "custom", message: "verification workflow identity is required" });
+  }
+  if ((signature.state === "COMPLETED" || signature.state === "STALE") &&
+      (signature.cosign_version === undefined || signature.completed_at === undefined)) {
+    context.addIssue({ code: "custom", message: "completed verification evidence is required" });
+  }
+  if (signature.state === "FAILED" && signature.error_code === undefined) {
+    context.addIssue({ code: "custom", message: "failed verification error code is required" });
+  }
+  if ((signature.state === "QUEUED" || signature.state === "RUNNING" || signature.state === "FAILED") &&
+      (signature.evidence.length !== 0 || signature.completed_at !== undefined || signature.cosign_version !== undefined)) {
+    context.addIssue({ code: "custom", message: "unfinished verification cannot contain completed evidence" });
+  }
+});
+
+export const artifactSecuritySchema = z.object({
+  digest: artifactDigestSchema,
+  scan: securityScanResultSchema,
+  sbom: securitySBOMResultSchema,
+  signature: signatureResultSchema,
+});
+
 export type HealthResponse = z.infer<typeof healthResponseSchema>;
 export type ErrorEnvelope = z.infer<typeof errorEnvelopeSchema>;
 export type FieldError = z.infer<typeof fieldErrorSchema>;
@@ -181,3 +285,7 @@ export type ArtifactList = z.infer<typeof artifactListSchema>;
 export type ManifestDescriptor = z.infer<typeof manifestDescriptorSchema>;
 export type Tag = z.infer<typeof tagSchema>;
 export type TagList = z.infer<typeof tagListSchema>;
+export type ArtifactSecurity = z.infer<typeof artifactSecuritySchema>;
+export type SecurityResult = z.infer<typeof securityResultSchema>;
+export type SignatureEvidence = z.infer<typeof signatureEvidenceSchema>;
+export type SignatureResult = z.infer<typeof signatureResultSchema>;

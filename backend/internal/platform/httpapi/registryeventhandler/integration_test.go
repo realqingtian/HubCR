@@ -17,11 +17,13 @@ import (
 	"hubcr.io/hubcr/internal/modules/authorization"
 	"hubcr.io/hubcr/internal/modules/registry"
 	"hubcr.io/hubcr/internal/modules/repositories"
+	"hubcr.io/hubcr/internal/modules/security"
 	"hubcr.io/hubcr/internal/platform/observability"
 	"hubcr.io/hubcr/internal/platform/postgres"
 	"hubcr.io/hubcr/internal/platform/postgres/artifactstore"
 	"hubcr.io/hubcr/internal/platform/postgres/authstore"
 	"hubcr.io/hubcr/internal/platform/postgres/repositorystore"
+	"hubcr.io/hubcr/internal/platform/postgres/securitystore"
 	"hubcr.io/hubcr/migrations"
 )
 
@@ -55,7 +57,13 @@ func TestRegistryEventHandlerReconcilesRealPostgresState(t *testing.T) {
 	if err != nil {
 		t.Fatalf("artifacts.NewService() error = %v", err)
 	}
-	notificationService, err := registry.NewNotificationService(repositoryService, artifactService)
+	securityService, err := security.NewService(securitystore.New(pool.ORM()), func() time.Time { return now })
+	if err != nil {
+		t.Fatalf("security.NewService() error = %v", err)
+	}
+	notificationService, err := registry.NewNotificationService(
+		repositoryService, artifactService, securityService,
+	)
 	if err != nil {
 		t.Fatalf("registry.NewNotificationService() error = %v", err)
 	}

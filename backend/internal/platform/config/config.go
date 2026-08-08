@@ -45,7 +45,32 @@ type Registry struct {
 }
 
 type Worker struct {
-	PollInterval time.Duration
+	Database        Database
+	PollInterval    time.Duration
+	LeaseDuration   time.Duration
+	JobTimeout      time.Duration
+	ShutdownTimeout time.Duration
+	RetryBase       time.Duration
+	RetryMax        time.Duration
+	MaxConcurrency  int32
+	Scanner         SecurityScanner
+}
+
+type SecurityScanner struct {
+	Enabled            bool
+	Binary             string
+	CacheDir           string
+	CosignBinary       string
+	CosignScratchDir   string
+	RegistryHost       string
+	RegistryInsecure   bool
+	RegistryService    string
+	RegistryIssuer     string
+	RegistryTokenTTL   time.Duration
+	RegistryClockSkew  time.Duration
+	RegistryPrivateKey string
+	RepairInterval     time.Duration
+	RepairBatch        int32
 }
 
 func LoadAPI() (API, error) {
@@ -169,12 +194,119 @@ func LoadDatabase() (Database, error) {
 }
 
 func LoadWorker() (Worker, error) {
+	database, err := LoadDatabase()
+	if err != nil {
+		return Worker{}, err
+	}
 	pollInterval, err := duration("HUBCR_WORKER_POLL_INTERVAL", 5*time.Second)
 	if err != nil {
 		return Worker{}, err
 	}
+	leaseDuration, err := duration("HUBCR_WORKER_LEASE_DURATION", 15*time.Minute)
+	if err != nil {
+		return Worker{}, err
+	}
+	jobTimeout, err := duration("HUBCR_WORKER_JOB_TIMEOUT", 10*time.Minute)
+	if err != nil {
+		return Worker{}, err
+	}
+	shutdownTimeout, err := duration("HUBCR_WORKER_SHUTDOWN_TIMEOUT", 20*time.Second)
+	if err != nil {
+		return Worker{}, err
+	}
+	retryBase, err := duration("HUBCR_WORKER_RETRY_BASE", 5*time.Second)
+	if err != nil {
+		return Worker{}, err
+	}
+	retryMax, err := duration("HUBCR_WORKER_RETRY_MAX", 5*time.Minute)
+	if err != nil {
+		return Worker{}, err
+	}
+	maxConcurrency, err := positiveInt32("HUBCR_WORKER_MAX_CONCURRENCY", 2)
+	if err != nil {
+		return Worker{}, err
+	}
+	if leaseDuration <= jobTimeout {
+		return Worker{}, errors.New("HUBCR_WORKER_LEASE_DURATION must be greater than HUBCR_WORKER_JOB_TIMEOUT")
+	}
+	if retryMax < retryBase {
+		return Worker{}, errors.New("HUBCR_WORKER_RETRY_MAX must be greater than or equal to HUBCR_WORKER_RETRY_BASE")
+	}
+	if maxConcurrency > 64 {
+		return Worker{}, errors.New("HUBCR_WORKER_MAX_CONCURRENCY must not exceed 64")
+	}
+	scanner, err := loadSecurityScanner()
+	if err != nil {
+		return Worker{}, err
+	}
 
-	return Worker{PollInterval: pollInterval}, nil
+	return Worker{
+		Database: database, PollInterval: pollInterval, LeaseDuration: leaseDuration,
+		JobTimeout: jobTimeout, ShutdownTimeout: shutdownTimeout,
+		RetryBase: retryBase, RetryMax: retryMax, MaxConcurrency: maxConcurrency,
+		Scanner: scanner,
+	}, nil
+}
+
+func loadSecurityScanner() (SecurityScanner, error) {
+	enabled, err := boolean("HUBCR_SECURITY_SCANNER_ENABLED", false)
+	if err != nil {
+		return SecurityScanner{}, err
+	}
+	insecure, err := boolean("HUBCR_SCANNER_REGISTRY_INSECURE", false)
+	if err != nil {
+		return SecurityScanner{}, err
+	}
+	tokenTTL, err := duration("HUBCR_SCANNER_REGISTRY_TOKEN_TTL", 5*time.Minute)
+	if err != nil {
+		return SecurityScanner{}, err
+	}
+	repairInterval, err := duration("HUBCR_SECURITY_REPAIR_INTERVAL", 30*time.Second)
+	if err != nil {
+		return SecurityScanner{}, err
+	}
+	repairBatch, err := positiveInt32("HUBCR_SECURITY_REPAIR_BATCH", 100)
+	if err != nil {
+		return SecurityScanner{}, err
+	}
+	scanner := SecurityScanner{
+		Enabled: enabled, Binary: stringValue("HUBCR_TRIVY_BINARY", "trivy"),
+		CacheDir:         stringValue("HUBCR_TRIVY_CACHE_DIR", "/tmp/hubcr-trivy"),
+		CosignBinary:     stringValue("HUBCR_COSIGN_BINARY", "cosign"),
+		CosignScratchDir: stringValue("HUBCR_COSIGN_SCRATCH_DIR", "/tmp/hubcr-cosign"),
+		RegistryHost:     stringValue("HUBCR_SCANNER_REGISTRY_HOST", "localhost:5000"),
+		RegistryInsecure: insecure,
+		RegistryService:  stringValue("HUBCR_REGISTRY_SERVICE", "hubcr-registry"),
+		RegistryIssuer:   stringValue("HUBCR_REGISTRY_ISSUER", "hubcr-token-service"),
+		RegistryTokenTTL: tokenTTL, RegistryClockSkew: 30 * time.Second,
+		RegistryPrivateKey: stringValue("HUBCR_REGISTRY_TOKEN_PRIVATE_KEY_FILE", ""),
+		RepairInterval:     repairInterval, RepairBatch: repairBatch,
+	}
+	if tokenTTL < time.Minute || tokenTTL > 15*time.Minute || tokenTTL%time.Second != 0 {
+		return SecurityScanner{}, errors.New("HUBCR_SCANNER_REGISTRY_TOKEN_TTL must be a whole-second duration from 1m through 15m")
+	}
+	if repairBatch > 500 {
+		return SecurityScanner{}, errors.New("HUBCR_SECURITY_REPAIR_BATCH must not exceed 500")
+	}
+	if !enabled {
+		return scanner, nil
+	}
+	if scanner.Binary == "" || strings.TrimSpace(scanner.Binary) != scanner.Binary ||
+		scanner.CacheDir == "" || !filepath.IsAbs(scanner.CacheDir) || scanner.CosignBinary == "" ||
+		strings.TrimSpace(scanner.CosignBinary) != scanner.CosignBinary ||
+		scanner.CosignScratchDir == "" || !filepath.IsAbs(scanner.CosignScratchDir) {
+		return SecurityScanner{}, errors.New("Trivy and Cosign binaries plus absolute cache/scratch directories are required when security work is enabled")
+	}
+	if !validRegistryHost(scanner.RegistryHost) {
+		return SecurityScanner{}, errors.New("HUBCR_SCANNER_REGISTRY_HOST must be a Registry host without scheme, credentials, path, query, or fragment")
+	}
+	if !validRegistryIdentifier(scanner.RegistryService) || !validRegistryIdentifier(scanner.RegistryIssuer) {
+		return SecurityScanner{}, errors.New("scanner Registry service and issuer must be valid protocol identifiers")
+	}
+	if scanner.RegistryPrivateKey == "" || !filepath.IsAbs(scanner.RegistryPrivateKey) {
+		return SecurityScanner{}, errors.New("HUBCR_REGISTRY_TOKEN_PRIVATE_KEY_FILE must be an absolute path when scanning is enabled")
+	}
+	return scanner, nil
 }
 
 func stringValue(key, fallback string) string {
@@ -263,6 +395,16 @@ func validateRegistryExternalURL(value string, allowInsecureHTTP bool) error {
 	default:
 		return errors.New("HUBCR_REGISTRY_EXTERNAL_URL must use the http or https scheme")
 	}
+}
+
+func validRegistryHost(value string) bool {
+	if value == "" || strings.Contains(value, "/") || strings.Contains(value, "@") ||
+		strings.Contains(value, "?") || strings.Contains(value, "#") || strings.Contains(value, "://") {
+		return false
+	}
+	parsed, err := url.Parse("https://" + value)
+	return err == nil && parsed.Host == value && parsed.Hostname() != "" && parsed.User == nil &&
+		parsed.Path == "" && parsed.RawQuery == "" && parsed.Fragment == ""
 }
 
 func validRegistryIdentifier(value string) bool {

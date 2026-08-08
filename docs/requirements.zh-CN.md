@@ -3,7 +3,7 @@
 [English](requirements.md) | **简体中文**
 
 - 状态：工作基线
-- 最后复核：2026-08-01
+- 最后复核：2026-08-09
 - 适用范围：HubCR MVP 与明确延期的路线图
 
 本文档将 2026-08-01 的项目讨论整理为与当前仓库真实状态一致的需求基线。文中
@@ -57,9 +57,10 @@ hubcr.io/{namespace}/{repository}:{tag}
 - 通过 PostgreSQL、Redis、MinIO 和 Distribution 提供可复现的本地开发环境。
 - 从第一个可用 MVP 开始就保持授权与不可变 Digest 约束。
 
-### 3.2 MVP 之后的目标
+### 3.2 当前与 MVP 之后的安全目标
 
-- 异步 Trivy 扫描、SBOM 生成、Cosign 签名发现和策略感知的验证。
+- 异步 Trivy 扫描、SBOM 生成、Cosign 签名/证明材料验证、版本化 Trust 评估及经授权
+  且如实表达的 Web 证据均为当前 M4 能力。
 - Robot Account、个人访问令牌、审计日志、配额、Webhook、保留策略、垃圾回收、
   镜像复制和代理缓存。
 - 邮箱验证、密码找回、MFA、滥用防护、计费、高可用和多区域分发等公网服务能力。
@@ -74,24 +75,25 @@ hubcr.io/{namespace}/{repository}:{tag}
 
 ## 4. 当前实现基线
 
-截至 2026-08-01，仓库当前包含：
+截至 2026-08-09，仓库当前包含：
 
 | 区域 | 当前已实现 | 尚未实现 |
 | --- | --- | --- |
-| Go API | 进程装配、PostgreSQL 生命周期、健康检查、本地 Session、组织/成员、受 Policy 保护的 Repository 与 Artifact/Tag API、Registry Token 签发、经过认证的 Distribution Push 事件接入及 Registry 运维指标/日志 | 账号 Bootstrap/邀请兑换 |
-| Go Worker | 可配置轮询循环与优雅退出 | PostgreSQL 任务领取与安全任务 |
-| Web | 登录态 Shell、Overview、Namespace、Repository、Policy 支持的 Registry Quick-start、Artifact/Tag 列表与不可变 Digest 详情路由，以及经运行时校验的管理客户端与流程 | 账号 Bootstrap/邀请兑换及公开发现 |
+| Go API | 进程装配、PostgreSQL 生命周期、健康检查、本地 Session、组织/成员、受 Policy 保护的 Repository 与 Artifact/Tag API、Registry Token 签发、经过认证的 Distribution Push 事件接入、Registry 运维指标/日志，以及经授权且绑定 Digest 的扫描/SBOM 状态 API | 账号 Bootstrap/邀请兑换 |
+| Go Worker | PostgreSQL 支持的唯一 Intent、原子租约 Claim、有界并发、重试/退避、Dead-letter、取消、优雅退出、崩溃后回收、Artifact Workflow 修复、固定版本的 Trivy 扫描/CycloneDX SBOM Handler，以及带版本化 Trust 评估的 Cosign 验证 | 后续另行批准的安全 Enforcement |
+| Web | 登录态 Shell、Overview、Namespace、Repository、Policy 支持的 Registry Quick-start、Artifact/Tag 列表、不可变 Digest 详情路由，以及经过运行时校验的 Scan/SBOM/签名/Trust 证据 | 账号 Bootstrap/邀请兑换及公开发现 |
 | OCI 数据面 | 已有 MinIO 支持且受 Token 保护的本地 Distribution Gateway，并通过授权 Docker/OCI 检查及向控制面投递 Push 事件 | Delete 事件协调与获批的生命周期行为 |
-| 基础设施 | PostgreSQL、Redis、MinIO、Distribution 的 Compose 定义（含仅监听 Loopback 的 Distribution 指标/队列可见性）；控制面 PostgreSQL 连接及覆盖到 Artifact/Tag 元数据的带版本 GORM 迁移 | Worker/Redis 连接、任务 Schema 迁移和生产部署 |
-| 质量保障 | Go 与 Web 单元检查、隔离 PostgreSQL 持久化/HTTP/跨租户测试、稳定 Playwright 状态测试、真实 M1 浏览器流程、完整 M2 Docker/OCI 授权矩阵及真实 Distribution Push-to-Web Artifact 发现旅程 | 后续安全端到端套件 |
+| 基础设施 | 本地基础设施，加固定 Digest 的完整单机 Compose 拓扑、显式迁移命令、手动 PostgreSQL/Registry 对象备份、Checksum 校验恢复、Worker PostgreSQL 组合、非权威 Trivy Cache、私有 Cosign Scratch，以及直至 `000009_signature_trust` 的带版本 GORM 迁移 | Redis 应用状态、Kubernetes 与高可用 |
+| 质量保障 | Go 与 Web 单元检查、隔离 PostgreSQL 持久化/HTTP/跨租户测试、稳定 Playwright 状态测试、真实浏览器流程、完整 M2 Docker/OCI 授权矩阵、Push-to-Web Artifact 发现、干净卷恢复演练，以及带 Worker 重启/重试的真实 Trivy/CycloneDX/Cosign Trust 状态验收 | 更广 Host/Client 兼容性与容量证据 |
 
-在第 9 节 MVP 退出标准全部通过前，当前脚手架既不能用于生产，也不能被描述成已可用
-的多用户 Registry。
+Registry MVP 目前是具有一个有界部署与恢复契约的候选版本，并非通用生产服务；账号
+Bootstrap、运维人员提供的 TLS、Secret 恢复、容量、兼容性、Trust Policy 管理 UI/API
+与基于扫描的 Pull 阻断仍是明确发布限制。
 
 ## 5. 功能需求
 
-优先级含义：**MUST** 是 Registry MVP 必须具备的能力，**SHOULD** 是不阻塞 MVP 时
-应当完成的能力，**DEFERRED** 属于后续里程碑。
+优先级含义：**MUST** 是当前或已完成的获批里程碑必须具备的能力，**SHOULD** 是不阻塞
+该里程碑时应当完成的能力，**DEFERRED** 属于后续或尚未批准的里程碑。
 
 ### 5.1 身份与会话
 
@@ -157,20 +159,29 @@ Web 会话与 Registry Token 是两种独立凭据。实现 FR-REG-002 前必须
 | FR-ART-004 | MUST | 重复或重试的 Registry 事件不会产生重复的 Artifact、Tag 或任务。 |
 | FR-ART-005 | SHOULD | 多平台 Index 展示其子 Manifest，且不会臆造缺失的平台元数据。 |
 
-### 5.6 软件供应链安全
+### 5.6 异步任务
 
 | ID | 优先级 | 需求 |
 | --- | --- | --- |
-| FR-SEC-001 | DEFERRED | Manifest Push 成功后按 Artifact Digest 创建异步 Trivy 扫描任务。 |
-| FR-SEC-002 | DEFERRED | 扫描记录包含状态、漏洞、严重级别、修复可用性、扫描器版本、漏洞库版本和时间。 |
-| FR-SEC-003 | DEFERRED | HubCR 生成或关联绑定不可变 Artifact Digest 的 SBOM。 |
-| FR-SEC-004 | DEFERRED | 发现并验证 Cosign 签名和证明材料，且不混淆“存在”“有效”和“可信”。 |
-| FR-SEC-005 | DEFERRED | 验证记录包含 Artifact Digest、签名 Digest、身份或密钥证据、策略版本、结果和时间。 |
-| FR-SEC-006 | DEFERRED | 失败任务可安全重试，并如实展示排队、执行中、完成、失败和过期状态。 |
+| FR-JOB-001 | MUST | M4 迁移可从空数据库创建持久化 PostgreSQL Job Foundation。 |
+| FR-JOB-002 | MUST | Worker 使用租约原子领取任务，提供有界重试与退避、最终死信状态，以及进程崩溃后的租约恢复。 |
+| FR-JOB-003 | MUST | 确定性的唯一 Intent 防止同一任务类型、Repository、Artifact Digest 和策略版本产生重复的当前任务。 |
+| FR-JOB-004 | MUST | Worker 并发有界，Handler 幂等且可取消；优雅关闭停止领取新任务，不会静默丢失已持久化工作。 |
+
+### 5.7 软件供应链安全
+
+| ID | 优先级 | 需求 |
+| --- | --- | --- |
+| FR-SEC-001 | MUST | Manifest Push 成功后按 Artifact Digest 创建异步 Trivy 扫描任务。 |
+| FR-SEC-002 | MUST | 扫描记录包含状态、漏洞、严重级别、修复可用性、扫描器版本、漏洞库版本和时间。 |
+| FR-SEC-003 | MUST | HubCR 生成或关联绑定不可变 Artifact Digest 的 SBOM。 |
+| FR-SEC-004 | MUST | 发现并验证 Cosign 签名和证明材料，且不混淆“存在”“有效”和“可信”。 |
+| FR-SEC-005 | MUST | 验证记录包含 Artifact Digest、签名 Digest、身份或密钥证据、策略版本、结果和时间。 |
+| FR-SEC-006 | MUST | 失败任务可安全重试，并如实展示排队、执行中、完成、失败和过期状态。 |
 
 除非另行批准的策略明确要求 Pull 决策等待安全结果，否则安全任务始终异步执行。
 
-### 5.7 运维与管理
+### 5.8 运维与管理
 
 | ID | 优先级 | 需求 |
 | --- | --- | --- |
@@ -179,13 +190,14 @@ Web 会话与 Registry Token 是两种独立凭据。实现 FR-REG-002 前必须
 | FR-OPS-003 | DEFERRED | Robot Account 和访问令牌具有作用域、可撤销，并且仅在创建时展示一次 Secret。 |
 | FR-OPS-004 | DEFERRED | 审计日志记录安全相关的操作者、操作、目标、结果和时间。 |
 | FR-OPS-005 | DEFERRED | 配额、保留策略、Webhook 投递、复制、缓存和垃圾回收分别需要经过确认的运维策略。 |
+| FR-OPS-006 | MUST | 受支持 MVP 部署提供维护窗口 PostgreSQL 与 Registry 对象备份、Checksum 校验后的破坏性恢复、当前迁移应用及恢复验收，并且不把 Registry Secret 装入数据包。 |
 
 ## 6. 领域与数据约束
 
 当前持久化模型已包含 `User`、本地凭据、可撤销 Web Session、管理员邀请、
 `Organization`、`OrganizationMember`、`Namespace`、`Repository`、`Artifact`、当前
-`Tag` 和有序 Manifest Descriptor 记录。安全与运维里程碑随后添加任务、扫描、SBOM、
-签名、信任策略、Robot、Token 和审计记录。
+`Tag` 和有序 Manifest Descriptor 记录。持久化模型也已包含 Job、Scan、SBOM、签名与
+版本化 Trust Policy 记录；后续运维工作可增加 Robot、Token 和审计记录。
 
 强制数据约束包括：
 
@@ -214,7 +226,8 @@ Web 会话与 Registry Token 是两种独立凭据。实现 FR-REG-002 前必须
 - 优雅退出时停止接收新工作，并限制未完成请求或任务的结束时间。
 - 事件处理与 Worker 执行可承受重复投递。
 - 只有真实流量所需依赖均可用时，就绪检查才能返回成功。
-- 上生产前定义备份、恢复和灾难恢复目标。
+- 获批 MVP 恢复目标是 D-010 的手动停机子集；数值化 RPO/RTO 与跨区域灾难恢复仍未
+  获批。
 
 ### 性能与扩展性
 
@@ -252,7 +265,7 @@ Registry MVP 必须端到端演示以下流程：
 只有以下条件全部成立，MVP 才算完成：
 
 - 影响 MVP 数据库结构与公开 API 的决策均已确认并记录；
-- 迁移可从空数据库创建身份、命名空间、组织、仓库、Artifact、Tag、会话和任务基础；
+- 迁移可从空数据库创建身份、命名空间、组织、仓库、Artifact、Tag 和会话基础；
 - 第 8 节所有必需流程均可通过受支持的本地入口运行；
 - 授权测试覆盖公开/私有可见性、成员关系、允许操作、拒绝、Token 过期和跨仓库隔离；
 - Registry 事件可按 Digest 幂等协调 Artifact 和 Tag；
@@ -272,10 +285,10 @@ Registry MVP 必须端到端演示以下流程：
 | [D-004 组织角色](decisions/d-004-organization-roles.zh-CN.md) | 成员迁移与 API 前 | `ACCEPTED`：`OWNER`、`ADMIN`、`WRITER`、`READER` 及记录中的能力矩阵。 |
 | [D-005 权限继承](decisions/d-005-grant-inheritance.zh-CN.md) | 授权策略前 | `ACCEPTED`：仅使用组织角色；仓库级 Grant 延后。 |
 | [D-006 公开 Pull](decisions/d-006-public-pull.zh-CN.md) | Registry Token 流程前 | `ACCEPTED`：明确 `PUBLIC` 的仓库通过精确 Scope 的短期 Token 允许匿名 Pull。 |
-| D-007 安全执行 | Pull 策略前 | 首期仅展示扫描信息，还是支持可选或强制阻断 Pull？ |
-| D-008 签名信任 | 验签数据结构前 | 固定公钥、组织公钥、OIDC Keyless 身份，还是组合模型？ |
-| D-009 生产部署 | 部署契约前 | Compose、Kubernetes 或两者都支持；首期支持哪个？ |
-| D-010 运维策略 | 删除与保留功能前 | 配额、删除、保留、垃圾回收、备份和审计的期望是什么？ |
+| [D-007 安全执行](decisions/d-007-security-enforcement.zh-CN.md) | Pull 策略前 | `ACCEPTED`：首版 M4 仅异步展示扫描信息，不阻断 Pull。 |
+| [D-008 签名信任](decisions/d-008-signature-trust.zh-CN.md) | 验签数据结构前 | `ACCEPTED`：组合公钥和精确 OIDC Issuer 加 Subject 身份的版本化 Namespace 策略。 |
+| [D-009 生产部署](decisions/d-009-production-deployment.zh-CN.md) | 部署契约前 | `ACCEPTED`：采用位于运维 HTTPS 反向代理之后的单机 Docker Compose；Kubernetes 延期。 |
+| [D-010 运维策略](decisions/d-010-operations-policy.zh-CN.md) | 删除与保留功能前 | PostgreSQL 加 Registry 对象的手动备份/恢复与迁移演练子集为 `ACCEPTED`；保留、删除、GC、配额、审计和数值化 DR 目标仍延期。 |
 | D-011 开源许可证 | 第一次公开发布前 | HubCR 采用哪一种开源许可证？ |
 
 每个已确认决策都应作为简短的架构或产品决策记录保存在 `docs/decisions/`，从本表

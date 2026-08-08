@@ -1,6 +1,7 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 import {
   getArtifact,
+  getArtifactSecurity,
   getCurrentUser,
   getRepository,
   listArtifacts,
@@ -169,6 +170,35 @@ describe("typed API client", () => {
     expect(fetchMock).toHaveBeenNthCalledWith(
       3,
       `/api/v1/namespaces/platform.team/repositories/backend_api/artifacts/${encodeURIComponent(artifactDigest)}`,
+      expect.objectContaining({ credentials: "include" }),
+    );
+  });
+
+  it("reads and validates digest-bound security evidence", async () => {
+    const timestamp = "2026-08-01T12:00:00Z";
+    const payload = {
+      digest: artifactDigest,
+      scan: {
+        state: "COMPLETED", attempts: 1, updated_at: timestamp, completed_at: timestamp,
+        tool: {
+          name: "TRIVY", scanner_version: "0.72.0", database_schema_version: 2,
+          database_updated_at: timestamp, database_downloaded_at: timestamp,
+        },
+        finding_count: 0,
+        severity_counts: {},
+      },
+      sbom: { state: "COMPLETED", attempts: 1, updated_at: timestamp, completed_at: timestamp, format: "CYCLONEDX_JSON" },
+      signature: { state: "ABSENT", evidence: [] },
+    };
+    const fetchMock = vi.fn().mockResolvedValue(new Response(JSON.stringify(payload), {
+      status: 200,
+      headers: { "Content-Type": "application/json" },
+    }));
+    vi.stubGlobal("fetch", fetchMock);
+
+    await expect(getArtifactSecurity("platform.team", "backend_api", artifactDigest)).resolves.toEqual(payload);
+    expect(fetchMock).toHaveBeenCalledWith(
+      `/api/v1/namespaces/platform.team/repositories/backend_api/artifacts/${encodeURIComponent(artifactDigest)}/security`,
       expect.objectContaining({ credentials: "include" }),
     );
   });

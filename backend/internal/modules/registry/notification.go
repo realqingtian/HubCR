@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"hubcr.io/hubcr/internal/modules/artifacts"
+	"hubcr.io/hubcr/internal/modules/security"
 )
 
 const (
@@ -69,19 +70,27 @@ type ArtifactReconciler interface {
 	ReconcileArtifact(context.Context, artifacts.Observation) (artifacts.Snapshot, error)
 }
 
+type SecurityWorkflowScheduler interface {
+	EnsureWorkflow(context.Context, security.Target) (security.Workflow, bool, error)
+}
+
 type NotificationService struct {
 	repositories RepositoryResolver
 	artifacts    ArtifactReconciler
+	security     SecurityWorkflowScheduler
 }
 
 func NewNotificationService(
 	repositories RepositoryResolver,
 	artifactReconciler ArtifactReconciler,
+	securityScheduler SecurityWorkflowScheduler,
 ) (*NotificationService, error) {
-	if repositories == nil || artifactReconciler == nil {
+	if repositories == nil || artifactReconciler == nil || securityScheduler == nil {
 		return nil, errors.New("Registry notification service dependencies must be configured")
 	}
-	return &NotificationService{repositories: repositories, artifacts: artifactReconciler}, nil
+	return &NotificationService{
+		repositories: repositories, artifacts: artifactReconciler, security: securityScheduler,
+	}, nil
 }
 
 func (s *NotificationService) Process(
@@ -114,6 +123,17 @@ func (s *NotificationService) Process(
 		observation.RepositoryID = repositoryContext.Repository.ID
 		if _, err := s.artifacts.ReconcileArtifact(ctx, observation); err != nil {
 			return NotificationResult{}, classifyNotificationArtifactError(err)
+		}
+		target, err := security.NewTarget(
+			repositoryContext.Repository.ID, namespace, repository, observation.Digest,
+		)
+		if err != nil {
+			return NotificationResult{}, fmt.Errorf("%w: construct security target", ErrInvalidNotification)
+		}
+		if _, _, err := s.security.EnsureWorkflow(ctx, target); err != nil {
+			return NotificationResult{}, fmt.Errorf(
+				"%w: persist security workflow", ErrNotificationUnavailable,
+			)
 		}
 		result.Processed++
 	}

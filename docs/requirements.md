@@ -3,7 +3,7 @@
 **English** | [简体中文](requirements.zh-CN.md)
 
 - Status: working baseline
-- Last reviewed: 2026-08-01
+- Last reviewed: 2026-08-09
 - Applies to: HubCR MVP and the explicitly deferred roadmap
 
 This document turns the original project discussion into a requirements baseline that
@@ -65,10 +65,11 @@ Primary users are:
   Distribution.
 - Preserve authorization and immutable-digest invariants from the first usable MVP.
 
-### 3.2 Post-MVP goals
+### 3.2 Current and post-MVP security goals
 
-- Asynchronous Trivy scanning, SBOM generation, Cosign signature discovery, and
-  policy-aware verification.
+- Asynchronous Trivy scanning, SBOM generation, Cosign signature/attestation
+  verification, versioned trust evaluation, and truthful authorized Web evidence are
+  current M4 capabilities.
 - Robot accounts, personal access tokens, audit logs, quotas, webhooks, retention,
   garbage collection, replication, and proxy caching.
 - Public-service controls such as email verification, password recovery, MFA, abuse
@@ -85,24 +86,27 @@ Primary users are:
 
 ## 4. Current implementation baseline
 
-As of 2026-08-01, the repository contains:
+As of 2026-08-09, the repository contains:
 
 | Area | Implemented now | Not implemented yet |
 | --- | --- | --- |
-| Go API | Process composition, PostgreSQL lifecycle, health, local session, organization/member, policy-protected repository and Artifact/Tag APIs, Registry token issuance, authenticated Distribution push-event ingestion, and Registry operational metrics/logs | Account bootstrap/invitation redemption |
-| Go worker | Configured polling loop and graceful shutdown | PostgreSQL job claiming and security jobs |
-| Web | Authenticated shell with overview, namespace, repository, policy-backed Registry quick-start, Artifact/Tag lists, and immutable Digest detail routes plus runtime-validated management clients and flows | Account bootstrap/invitation redemption and public discovery |
+| Go API | Process composition, PostgreSQL lifecycle, health, local session, organization/member, policy-protected repository and Artifact/Tag APIs, Registry token issuance, authenticated Distribution push-event ingestion, Registry operational metrics/logs, and an authorized digest-bound scan/SBOM status API | Account bootstrap/invitation redemption |
+| Go worker | PostgreSQL-backed unique intents, atomic leased claims, bounded concurrency, retry/backoff, dead-letter state, cancellation, graceful shutdown, crash-safe reclaim, Artifact workflow repair, pinned Trivy scan/CycloneDX SBOM handlers, and Cosign verification with versioned trust evaluation | Later approved security enforcement |
+| Web | Authenticated shell with overview, namespace, repository, policy-backed Registry quick-start, Artifact/Tag lists, immutable Digest detail routes, and runtime-validated scan/SBOM/signature/trust evidence | Account bootstrap/invitation redemption and public discovery |
 | OCI data plane | Token-protected local Distribution gateway backed by MinIO with authorized Docker/OCI checks and push-event delivery to the control plane | Delete-event reconciliation and approved lifecycle behavior |
-| Infrastructure | Compose definitions for PostgreSQL, Redis, MinIO and Distribution, including loopback-only Distribution metrics/queue visibility; control-plane PostgreSQL connection and versioned GORM migrations through artifact/tag metadata | Worker/Redis connections, job schema migrations and production deployment |
-| Quality | Go and web unit checks, isolated PostgreSQL persistence/HTTP/cross-tenant tests, deterministic Playwright state tests, real M1 browser journeys, the complete M2 Docker/OCI authorization matrix, and a real Distribution Push-to-Web Artifact discovery journey | Later security end-to-end suites |
+| Infrastructure | Local infrastructure plus a digest-pinned complete single-host Compose topology, explicit migration command, manual PostgreSQL/Registry-object backup, checksum-verified restore, worker PostgreSQL composition, non-authoritative Trivy cache, private Cosign scratch space, and versioned GORM migrations through `000009_signature_trust` | Redis application state, Kubernetes and high availability |
+| Quality | Go and Web unit checks, isolated PostgreSQL persistence/HTTP/cross-tenant tests, deterministic Playwright state tests, real browser journeys, the complete M2 Docker/OCI authorization matrix, Push-to-Web Artifact discovery, clean-volume recovery rehearsal, and real Trivy/CycloneDX/Cosign trust-state acceptance with worker restart and retry | Wider host/client compatibility and capacity evidence |
 
-The scaffold is not production-ready and must not be described as a functioning
-multi-user registry until the MVP exit criteria in section 9 pass.
+The Registry MVP is a release candidate with one bounded deployment and recovery
+contract. It is not a general-purpose production service; account bootstrap,
+operator-supplied TLS, secret recovery, capacity, compatibility, trust-policy
+administration UI/API, and scan-based Pull blocking remain explicit release limitations.
 
 ## 5. Functional requirements
 
-Priority meanings: **MUST** is required for the Registry MVP, **SHOULD** is expected
-when it does not block the MVP, and **DEFERRED** belongs to a later milestone.
+Priority meanings: **MUST** is required by the current or a completed accepted
+milestone, **SHOULD** is expected when it does not block that milestone, and
+**DEFERRED** belongs to a later or unapproved milestone.
 
 ### 5.1 Identity and sessions
 
@@ -169,21 +173,30 @@ implemented.
 | FR-ART-004 | MUST | Duplicate or retried registry events do not create duplicate artifacts, tags, or jobs. |
 | FR-ART-005 | SHOULD | Multi-platform indexes expose their child manifests without inventing missing platform metadata. |
 
-### 5.6 Supply-chain security
+### 5.6 Asynchronous jobs
 
 | ID | Priority | Requirement |
 | --- | --- | --- |
-| FR-SEC-001 | DEFERRED | A successful manifest push enqueues an asynchronous Trivy scan keyed by artifact digest. |
-| FR-SEC-002 | DEFERRED | Scan records include status, findings, severity, fix availability, scanner version, vulnerability database version, and timestamps. |
-| FR-SEC-003 | DEFERRED | HubCR generates or associates an SBOM with the immutable artifact digest. |
-| FR-SEC-004 | DEFERRED | Cosign signatures and attestations are discovered and verified without conflating presence, validity, and trust. |
-| FR-SEC-005 | DEFERRED | Verification records the artifact digest, signature digest, identity/key evidence, policy version, result, and verification time. |
-| FR-SEC-006 | DEFERRED | Failed jobs can be retried safely and expose truthful queued, running, completed, failed, and stale states. |
+| FR-JOB-001 | MUST | M4 migrations create a durable PostgreSQL job foundation from an empty database. |
+| FR-JOB-002 | MUST | Workers claim jobs atomically with leases, bounded retries and backoff, terminal dead-letter state, and crash-safe lease recovery. |
+| FR-JOB-003 | MUST | A deterministic unique intent prevents duplicate current work for the same job kind, repository, artifact digest, and policy version. |
+| FR-JOB-004 | MUST | Worker concurrency is bounded, handlers are idempotent and cancellable, and graceful shutdown stops new claims without silently losing persisted work. |
+
+### 5.7 Supply-chain security
+
+| ID | Priority | Requirement |
+| --- | --- | --- |
+| FR-SEC-001 | MUST | A successful manifest push enqueues an asynchronous Trivy scan keyed by artifact digest. |
+| FR-SEC-002 | MUST | Scan records include status, findings, severity, fix availability, scanner version, vulnerability database version, and timestamps. |
+| FR-SEC-003 | MUST | HubCR generates or associates an SBOM with the immutable artifact digest. |
+| FR-SEC-004 | MUST | Cosign signatures and attestations are discovered and verified without conflating presence, validity, and trust. |
+| FR-SEC-005 | MUST | Verification records the artifact digest, signature digest, identity/key evidence, policy version, result, and verification time. |
+| FR-SEC-006 | MUST | Failed jobs can be retried safely and expose truthful queued, running, completed, failed, and stale states. |
 
 Security work remains asynchronous unless a separately approved policy explicitly
 requires a pull decision to block on it.
 
-### 5.7 Operations and administration
+### 5.8 Operations and administration
 
 | ID | Priority | Requirement |
 | --- | --- | --- |
@@ -192,14 +205,15 @@ requires a pull decision to block on it.
 | FR-OPS-003 | DEFERRED | Robot accounts and access tokens are scoped, revocable, and display secrets only at creation. |
 | FR-OPS-004 | DEFERRED | Audit logs capture security-relevant actor, action, target, result, and timestamp data. |
 | FR-OPS-005 | DEFERRED | Quotas, retention, webhook delivery, replication, caching, and garbage collection each require an approved operating policy. |
+| FR-OPS-006 | MUST | The supported MVP deployment provides a maintenance-window PostgreSQL and Registry-object backup, checksum-verified destructive restore, current migration application, and recovery acceptance without bundling Registry secrets. |
 
 ## 6. Domain and data constraints
 
 The durable model now includes `User`, local credential, revocable web session,
 administrator invitation, `Organization`, `OrganizationMember`, `Namespace`,
 `Repository`, `Artifact`, current `Tag`, and ordered Manifest descriptor records.
-Security and operations milestones later add job, scan, SBOM, signature, trust-policy,
-robot, token, and audit records.
+The durable model also includes job, scan, SBOM, signature, and versioned trust-policy
+records. Later operations work may add robot, token, and audit records.
 
 Mandatory data constraints are:
 
@@ -234,7 +248,8 @@ Mandatory data constraints are:
 - Event handling and worker execution must tolerate duplicate delivery.
 - Readiness must only report success when dependencies required for real traffic are
   usable.
-- Backup, restore, and disaster-recovery objectives are defined before production.
+- The accepted MVP recovery objective is the manual, downtime-based D-010 subset;
+  numeric RPO/RTO and cross-region disaster recovery remain unapproved.
 
 ### Performance and scalability
 
@@ -278,7 +293,7 @@ The MVP is complete only when all of the following are true:
 
 - the decisions that affect its schema and public APIs are approved and recorded;
 - migrations create the required identity, namespace, organization, repository,
-  artifact, tag, session, and job foundations from an empty database;
+  artifact, tag, and session foundations from an empty database;
 - the required journeys in section 8 pass through supported local entry points;
 - authorization tests cover public/private visibility, membership, allowed actions,
   denial, token expiry, and cross-repository isolation;
@@ -304,10 +319,10 @@ The MVP is complete only when all of the following are true:
 | [D-004 Organization roles](decisions/d-004-organization-roles.md) | Membership migrations and APIs | `ACCEPTED`: `OWNER`, `ADMIN`, `WRITER`, and `READER` with the recorded capability matrix. |
 | [D-005 Grant inheritance](decisions/d-005-grant-inheritance.md) | Authorization policy | `ACCEPTED`: organization-role-only access; repository-specific grants deferred. |
 | [D-006 Public pull](decisions/d-006-public-pull.md) | Registry token flow | `ACCEPTED`: anonymous pull for explicit `PUBLIC` repositories through exact-scope short-lived tokens. |
-| D-007 Security enforcement | Pull policy | Informational scans first or optional/mandatory pull blocking? |
-| D-008 Signature trust | Verification schema | Fixed keys, organization keys, OIDC keyless identities, or a combined model? |
-| D-009 Production deployment | Deployment contracts | Compose, Kubernetes, or both; which is supported first? |
-| D-010 Operations policy | Destructive/retention features | Quotas, deletion, retention, garbage collection, backup, and audit expectations? |
+| [D-007 Security enforcement](decisions/d-007-security-enforcement.md) | Pull policy | `ACCEPTED`: informational asynchronous scans first; no pull blocking in initial M4. |
+| [D-008 Signature trust](decisions/d-008-signature-trust.md) | Verification schema | `ACCEPTED`: versioned namespace policy combining public keys and exact OIDC issuer plus subject identities. |
+| [D-009 Production deployment](decisions/d-009-production-deployment.md) | Deployment contracts | `ACCEPTED`: single-host Docker Compose behind an operator-managed HTTPS reverse proxy; Kubernetes deferred. |
+| [D-010 Operations policy](decisions/d-010-operations-policy.md) | Destructive/retention features | `ACCEPTED` for manual PostgreSQL plus Registry-object backup/restore and migration rehearsal; retention, deletion, GC, quotas, audit and numeric DR targets remain deferred. |
 | D-011 License | First public release | Which open-source license governs HubCR? |
 
 Each accepted decision should be written as a short architecture or product decision

@@ -404,6 +404,29 @@ paths:
           $ref: "#/components/responses/AuthenticationFailed"
         "404":
           $ref: "#/components/responses/NotFound"
+  /api/v1/namespaces/{namespace}/repositories/{repository}/artifacts/{digest}/security:
+    parameters:
+      - $ref: "#/components/parameters/NamespaceName"
+      - $ref: "#/components/parameters/RepositoryName"
+      - $ref: "#/components/parameters/ArtifactDigest"
+    get:
+      operationId: getArtifactSecurity
+      summary: Get digest-bound asynchronous scan and SBOM state
+      security:
+        - sessionCookie: []
+      responses:
+        "200":
+          description: Truthful queued, running, completed, failed, or stale security evidence.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ArtifactSecurity"
+        "400":
+          $ref: "#/components/responses/InvalidRequest"
+        "401":
+          $ref: "#/components/responses/AuthenticationFailed"
+        "404":
+          $ref: "#/components/responses/NotFound"
   /api/v1/namespaces/{namespace}/repositories/{repository}/tags:
     parameters:
       - $ref: "#/components/parameters/NamespaceName"
@@ -941,6 +964,196 @@ components:
             $ref: "#/components/schemas/Artifact"
         meta:
           $ref: "#/components/schemas/PageMeta"
+    SecurityResultState:
+      type: string
+      enum:
+        - QUEUED
+        - RUNNING
+        - COMPLETED
+        - FAILED
+        - STALE
+    SecurityToolEvidence:
+      type: object
+      additionalProperties: false
+      required:
+        - name
+        - scanner_version
+        - database_schema_version
+        - database_updated_at
+        - database_downloaded_at
+      properties:
+        name:
+          type: string
+          const: TRIVY
+        scanner_version:
+          type: string
+          minLength: 1
+          maxLength: 128
+        database_schema_version:
+          type: integer
+          minimum: 1
+        database_updated_at:
+          type: string
+          format: date-time
+        database_downloaded_at:
+          type: string
+          format: date-time
+    SecurityScanStatus:
+      type: object
+      additionalProperties: false
+      required:
+        - state
+        - attempts
+        - updated_at
+      properties:
+        state:
+          $ref: "#/components/schemas/SecurityResultState"
+        error_code:
+          type: string
+          pattern: "^[A-Z][A-Z0-9_]{0,63}$"
+        attempts:
+          type: integer
+          minimum: 0
+          maximum: 100
+        updated_at:
+          type: string
+          format: date-time
+        completed_at:
+          type: string
+          format: date-time
+        tool:
+          $ref: "#/components/schemas/SecurityToolEvidence"
+        finding_count:
+          type: integer
+          minimum: 0
+        severity_counts:
+          type: object
+          additionalProperties:
+            type: integer
+            minimum: 0
+    SecuritySBOMStatus:
+      type: object
+      additionalProperties: false
+      required:
+        - state
+        - attempts
+        - updated_at
+      properties:
+        state:
+          $ref: "#/components/schemas/SecurityResultState"
+        error_code:
+          type: string
+          pattern: "^[A-Z][A-Z0-9_]{0,63}$"
+        attempts:
+          type: integer
+          minimum: 0
+          maximum: 100
+        updated_at:
+          type: string
+          format: date-time
+        completed_at:
+          type: string
+          format: date-time
+        format:
+          type: string
+          const: CYCLONEDX_JSON
+    SignatureEvidence:
+      type: object
+      additionalProperties: false
+      required:
+        - kind
+        - signature_digest
+        - signer_type
+        - cryptographic_state
+        - trust_state
+        - reason
+      properties:
+        kind:
+          type: string
+          enum: [SIGNATURE, ATTESTATION]
+        signature_digest:
+          type: string
+          pattern: "^sha256:[0-9a-f]{64}$"
+        signer_type:
+          type: string
+          enum: [PUBLIC_KEY, KEYLESS, UNKNOWN]
+        key_fingerprint:
+          type: string
+          pattern: "^sha256:[0-9a-f]{64}$"
+        oidc_issuer:
+          type: string
+          format: uri
+          pattern: "^https://"
+        subject:
+          type: string
+          minLength: 1
+          maxLength: 2048
+        cryptographic_state:
+          type: string
+          enum: [VALID, INVALID, UNVERIFIED, UNAVAILABLE]
+        trust_state:
+          type: string
+          enum: [TRUSTED, UNTRUSTED, NOT_EVALUATED]
+        reason:
+          type: string
+          minLength: 1
+          maxLength: 128
+    SignatureStatus:
+      type: object
+      additionalProperties: false
+      required:
+        - state
+        - evidence
+      properties:
+        state:
+          type: string
+          enum: [ABSENT, QUEUED, RUNNING, COMPLETED, FAILED, STALE]
+        error_code:
+          type: string
+          pattern: "^[A-Z][A-Z0-9_]{0,127}$"
+        attempts:
+          type: integer
+          minimum: 0
+          maximum: 100
+        updated_at:
+          type: string
+          format: date-time
+        policy_id:
+          type: string
+          format: uuid
+        policy_version:
+          type: integer
+          minimum: 1
+        cosign_version:
+          type: string
+          minLength: 1
+          maxLength: 128
+        completed_at:
+          type: string
+          format: date-time
+        evidence:
+          type: array
+          maxItems: 512
+          items:
+            $ref: "#/components/schemas/SignatureEvidence"
+    ArtifactSecurity:
+      type: object
+      additionalProperties: false
+      required:
+        - digest
+        - scan
+        - sbom
+        - signature
+      properties:
+        digest:
+          type: string
+          pattern: "^sha256:[0-9a-f]{64}$"
+        scan:
+          $ref: "#/components/schemas/SecurityScanStatus"
+        sbom:
+          $ref: "#/components/schemas/SecuritySBOMStatus"
+        signature:
+          $ref: "#/components/schemas/SignatureStatus"
     Tag:
       type: object
       additionalProperties: false

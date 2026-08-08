@@ -23,7 +23,12 @@ func main() {
 	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
 	defer stop()
 
-	if err := workerapp.New(cfg, logger).Run(ctx); err != nil {
+	app, err := workerapp.New(ctx, cfg, logger)
+	if err != nil {
+		logger.Error("initialize worker", "error", err)
+		os.Exit(1)
+	}
+	if err := app.Run(ctx); err != nil {
 		logger.Error("worker stopped", "error", err)
 		os.Exit(1)
 	}

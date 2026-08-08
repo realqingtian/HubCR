@@ -178,6 +178,32 @@ func TestServiceIssuesDeterministicMultipleExactScopes(t *testing.T) {
 	}
 }
 
+func TestSystemTokenServiceIssuesOnlyExactPullAccess(t *testing.T) {
+	now := time.Date(2026, 8, 8, 12, 0, 0, 999, time.UTC)
+	signer := &serviceSigner{}
+	service, err := NewSystemTokenService(signer, SystemTokenOptions{
+		Service: "hubcr-registry", Issuer: "hubcr-token-service",
+		Subject: "hubcr-security-worker", TokenTTL: 5 * time.Minute,
+		ClockSkew: 30 * time.Second, Clock: func() time.Time { return now },
+		Random: bytes.NewReader(bytes.Repeat([]byte{1}, 64)),
+	})
+	if err != nil {
+		t.Fatalf("NewSystemTokenService() error = %v", err)
+	}
+	token, err := service.IssuePull(context.Background(), "team/image")
+	if err != nil || token == "" {
+		t.Fatalf("IssuePull() = %q, %v", token, err)
+	}
+	if signer.claims.Subject != "hubcr-security-worker" || len(signer.claims.Access) != 1 ||
+		signer.claims.Access[0].Name != "team/image" ||
+		!reflect.DeepEqual(signer.claims.Access[0].Actions, []Action{ActionPull}) {
+		t.Fatalf("signed claims = %#v", signer.claims)
+	}
+	if _, err := service.IssuePull(context.Background(), "team/image:push"); !errors.Is(err, ErrInvalidRequest) {
+		t.Fatalf("IssuePull(injected scope) error = %v, want ErrInvalidRequest", err)
+	}
+}
+
 func TestServiceReturnsEmptyAccessForMissingRepositoryWithoutExistenceSignal(t *testing.T) {
 	resolver := &serviceRepositoryResolver{
 		errors: map[string]error{"team/missing": repositories.ErrNotFound},

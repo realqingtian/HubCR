@@ -35,7 +35,15 @@ that plain `AutoMigrate` does not provide, while CI exercises the same code as t
   visibility-change evidence, and namespace/name uniqueness.
   `000006_artifact_metadata` adds repository-scoped immutable Artifact Digests,
   current Tag references, ordered Manifest descriptors, and cross-repository
-  composite foreign-key protection.
+  composite foreign-key protection. After G-03 closed, `000007_job_foundation` adds
+  durable unique intents, atomic claim indexes, leases, attempts, retry scheduling,
+  terminal dead-letter state, and lifecycle constraints. `000008_security_scan` adds
+  one digest-bound workflow per repository Artifact, exact scan/SBOM job references,
+  normalized vulnerability findings, versioned scanner/database evidence,
+  CycloneDX JSON, tool-state freshness, and strict cross-repository foreign keys.
+  `000009_signature_trust` adds immutable namespace trust-policy versions, exact
+  public-key and keyless identity rules, digest-bound signature workflows and jobs,
+  cryptographic/trust evidence, current-result selection, and historical results.
 
 Run migrations against the configured database from the repository root:
 

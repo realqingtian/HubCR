@@ -9,13 +9,17 @@ HubCR 是面向个人开发者与组织的容器镜像中心。它围绕 OCI Reg
 成熟的 OCI 上传与下载行为交给 CNCF Distribution 处理，而不是从零重复实现。
 
 > [!IMPORTANT]
-> HubCR 目前处于早期开发阶段。仓库中已经包含可运行的控制面、本地 Session、组织和
+> HubCR 目前是具有验收证据的 Registry MVP 候选版本。仓库中已经包含可运行的控制面、本地 Session、组织和
 > Repository API、最小登录态 Web 工作区、短期 Registry Token 签发，以及受 Token
 > 保护的本地 Distribution Gateway。以 Digest 为键的 Artifact、Manifest/Index 和当前
 > Tag 持久化已接入经过认证的 Distribution Push Event，并通过受 Policy 保护的读取 API
 > 暴露。本地运维已具备 Registry Challenge、Token 决策、通知和协调遥测。账号
-> Bootstrap/邀请兑换和软件供应链安全能力尚未实现。当前版本不能作为生产环境镜像
-> 仓库使用。
+> Bootstrap/邀请兑换尚未实现。绑定 Digest 的异步 Trivy 扫描、CycloneDX SBOM
+> 生成、Cosign 签名/证明材料验证、版本化 Namespace Trust 评估、经授权安全状态 API
+> 与如实表达的 Artifact 安全 Web 体验均已实现。受支持
+> 单机 Compose 拓扑仍要求
+> 运维人员提供 HTTPS 反向代理、单独 Secret 恢复、加密异地备份及容量验证；部署前
+> 必须阅读发布限制。
 
 ## HubCR 的用途
 
@@ -51,15 +55,16 @@ docker push hubcr.io/my-organization/backend:v1.0.0
 | 范围 | 当前状态 |
 | --- | --- |
 | Go 控制面 | 已有可运行服务、PostgreSQL 生命周期、依赖感知健康检查、本地 Session、组织、Repository、Artifact/Tag 读取 API 和集中授权 |
-| 异步 Worker | 已有可运行的轮询骨架，尚未连接任务持久化 |
-| Web 应用 | 已有登录态 Next.js Shell、Overview、Namespace、Repository、Policy 支持的 Registry Quick-start、Artifact/Tag 列表与不可变 Digest 详情路由，以及经过运行时校验的类型化管理流程 |
-| OCI 数据面 | 本地 Gateway 将 `/v2/` 路由到 MinIO 支持且受 Token 保护的 CNCF Distribution，并将 `/token` 路由到 Go 控制面 |
-| PostgreSQL 与 Redis | 已定义本地 Compose 服务；控制面已连接 PostgreSQL，Redis 尚未接入 |
+| 异步 Worker | 已有 PostgreSQL 支持的有界 Worker，具备唯一 Intent、原子租约 Claim、重试/退避、Dead-letter、取消、崩溃后租约恢复，以及 Trivy 扫描/SBOM 和 Cosign 验证 Handler |
+| Web 应用 | 已有登录态 Next.js Shell、Overview、Namespace、Repository、Policy 支持的 Registry Quick-start、Artifact/Tag 列表、不可变 Digest 详情，以及如实表达的 Scan/SBOM/签名/信任证据与经过运行时校验的类型化流程 |
+| OCI 数据面 | 本地与受支持单机 Compose 拓扑中的 Gateway 都将 `/v2/` 路由到 MinIO 支持且受 Token 保护的 CNCF Distribution，并将 `/token` 路由到 Go 控制面 |
+| PostgreSQL 与 Redis | 控制面与 Worker 均已连接持久化 PostgreSQL；Redis 已定义，但仍不保存权威应用状态 |
 | 用户、组织与仓库 | 已有身份/Session API、个人 Namespace、组织/成员 API、集中能力 Policy、受 Policy 保护的 Repository API 及对应最小 Web 工作区；账号 Bootstrap/邀请兑换仍待实现 |
 | Registry Token 服务 | 已实现功能开关控制的 RS256 Token 签发、精确 Repository/Action Scope、JWKS 信任及支持轮换的验证 |
 | Artifact 元数据 | 已通过经过认证的 Distribution Push 事件与 GORM 协调 Repository 级不可变 Digest、Manifest/Index Descriptor 和可变当前 Tag，并提供经过授权的 API 与 Web 列表/详情视图 |
 | Registry 可观测性 | 已有不泄露 Secret 的 Challenge/Token/通知结构化日志、有界控制面 Counter 及仅监听 localhost 的 Distribution 指标/队列可见性 |
-| Trivy 与 Cosign | 已预留 Worker 边界，集成尚未实现 |
+| 部署与恢复 | 已有完整且固定 Image Digest 的单机 Compose 拓扑，以及手动 PostgreSQL/Registry 对象备份、Checksum 校验恢复、迁移、登录、私有 Pull 与 Digest 一致性演练 |
+| Trivy 与 Cosign | 已有固定版本的 Trivy 0.72.0 与 Cosign 3.0.6 工作流，持久化绑定 Digest 的 Scan、SBOM、密码学有效性、Signer 与版本化 Policy Trust 证据；经授权 API/Web 会区分 Absent、Unavailable、Invalid、Untrusted 与 Trusted |
 
 ## 架构
 
@@ -116,7 +121,7 @@ HubCR/
 │   ├── features/                产品功能模块
 │   ├── lib/api/                 类型化 API 客户端与 Zod Schema
 │   └── providers/               应用级客户端 Provider
-├── deployments/compose/         本地开发基础设施
+├── deployments/compose/         本地基础设施与单机部署
 ├── docs/                        架构与开发文档
 ├── AGENTS.md                    仓库级主要 AI 指令入口
 ├── .env.example                 本地配置模板
@@ -134,8 +139,8 @@ HubCR/
 | 缓存与协调 | Redis |
 | OCI Registry | CNCF Distribution |
 | 对象存储 | S3 兼容存储；本地开发使用 MinIO |
-| 漏洞扫描 | Trivy，规划为异步集成 |
-| 签名与证明材料 | Cosign，规划为异步集成 |
+| 漏洞扫描 | Trivy 0.72.0，固定版本的异步集成 |
+| 签名与证明材料 | Cosign 3.0.6，固定版本的异步验证 |
 | 本地编排 | Docker Compose |
 | 测试与验证 | Go test、Go vet、Vitest、ESLint、TypeScript、Next.js Build |
 
@@ -242,6 +247,14 @@ make infra-down
 | `make test-m1-e2e` | 通过真实 PostgreSQL、Go API、Next.js 与 Chromium 运行 M1 流程 1–3 |
 | `make test-m2-registry-e2e` | 运行隔离的真实 Docker Push/Pull 与 Registry 授权检查 |
 | `make test-m3-artifact-e2e` | 在 Chromium 中运行真实 Distribution Push-to-Web Artifact 发现旅程 |
+| `make prod-config` | 校验受保护的单机生产 Compose 配置 |
+| `make prod-build` | 构建 API/Worker/Migration 与独立 Web 镜像 |
+| `make prod-up` | 启动依赖、执行迁移并等待完整生产拓扑就绪 |
+| `make prod-maintenance-stop` | 为维护停止应用与 OCI 写入服务 |
+| `make prod-backup` | 创建经过确认的维护窗口 PostgreSQL 与 Registry 对象备份 |
+| `make prod-restore` | 显式替换数据、校验 Checksum 并应用当前迁移 |
+| `make test-m3-backup-restore-e2e` | 演练隔离生产构建、备份、Key 轮换、恢复、登录、私有 Pull 与 Digest 一致性 |
+| `make test-m4-security-e2e` | 验证真实 Push、Trivy/SBOM、Worker 重启/重试、Cosign Trusted/Invalid/Unsigned 状态、Policy 重新评估与版本证据 |
 | `make check-docs` | 验证双语 Markdown 配对、链接、空白与文件末尾换行 |
 | `make check-secrets` | 扫描已跟踪文本中的高置信度凭据模式 |
 | `make check-security-config` | 强制 Loopback 端口、生成式事件 Secret 与 Route 级 Proxy Timeout |
@@ -272,6 +285,22 @@ make infra-down
 | `HUBCR_REGISTRY_TOKEN_JWKS_FILE` | 无 | 包含活动公钥与可选退出公钥的可信公开 JWKS 绝对路径 |
 | `HUBCR_REGISTRY_EVENT_TOKEN` | 生成的本地 Secret | Distribution 事件共享 Secret；Make 工作流会在被忽略的 `.data/` 下生成 |
 | `HUBCR_WORKER_POLL_INTERVAL` | `5s` | Worker 轮询间隔 |
+| `HUBCR_WORKER_LEASE_DURATION` | `15m` | PostgreSQL Job 独占租约；必须长于 Job Timeout |
+| `HUBCR_WORKER_JOB_TIMEOUT` | `10m` | 每次 Handler 尝试的超时 |
+| `HUBCR_WORKER_SHUTDOWN_TIMEOUT` | `20s` | 关闭时等待已取消活动 Handler 的时间上限 |
+| `HUBCR_WORKER_RETRY_BASE` | `5s` | 确定性重试的初始退避 |
+| `HUBCR_WORKER_RETRY_MAX` | `5m` | 确定性重试的最大退避 |
+| `HUBCR_WORKER_MAX_CONCURRENCY` | `2` | 每个 Worker 的活动 Job 上限；最大允许值为 `64` |
+| `HUBCR_SECURITY_SCANNER_ENABLED` | `false` | 启用 Trivy 扫描/SBOM Handler；生产 Compose 示例默认启用 |
+| `HUBCR_TRIVY_BINARY` | `trivy` | Trivy 可执行文件路径 |
+| `HUBCR_TRIVY_CACHE_DIR` | `/tmp/hubcr-trivy` | 可写 Trivy Cache；生产使用非权威 `trivy-cache` Volume |
+| `HUBCR_COSIGN_BINARY` | `cosign` | Cosign 可执行文件路径 |
+| `HUBCR_COSIGN_SCRATCH_DIR` | `/tmp/hubcr-cosign` | 用于有界 Cosign 操作的绝对私有临时目录 |
+| `HUBCR_SCANNER_REGISTRY_HOST` | `localhost:5000` | Worker 以精确 Scope Pull 时使用的内部 Registry Host |
+| `HUBCR_SCANNER_REGISTRY_INSECURE` | `false` | 仅为私有 Compose Registry 网络允许 HTTP |
+| `HUBCR_SCANNER_REGISTRY_TOKEN_TTL` | `5m` | 内部精确 Repository Pull 短期 Token 有效期 |
+| `HUBCR_SECURITY_REPAIR_INTERVAL` | `30s` | 修复 Artifact 到安全 Workflow 崩溃间隙的周期 |
+| `HUBCR_SECURITY_REPAIR_BATCH` | `100` | 每轮修复缺失 Workflow 的数量上限 |
 | `HUBCR_CONTROL_PLANE_URL` | `http://127.0.0.1:8080` | Next.js 同源 `/api` Rewrite 的服务端目标 |
 | `NEXT_PUBLIC_API_BASE_URL` | 同源 | 面向已启用 CORS 端点的可选浏览器公开覆盖项 |
 | `POSTGRES_DB` | `hubcr` | 本地 PostgreSQL 数据库 |
@@ -317,16 +346,19 @@ make infra-down
 | Distribution 事件协调 | [Event reconciliation](docs/distribution-event-reconciliation.md) | [事件协调](docs/distribution-event-reconciliation.zh-CN.md) |
 | Registry 运维可观测性 | [Registry observability](docs/registry-observability.md) | [Registry 可观测性](docs/registry-observability.zh-CN.md) |
 | Registry MVP 威胁模型 | [Threat model](docs/security-threat-model.md) | [威胁模型](docs/security-threat-model.zh-CN.md) |
+| MVP 运维指南 | [Operator guide](docs/operator-guide.md) | [运维指南](docs/operator-guide.zh-CN.md) |
+| MVP 用户指南 | [User guide](docs/user-guide.md) | [用户指南](docs/user-guide.zh-CN.md) |
+| MVP 发布限制 | [Release limitations](docs/release-limitations.md) | [发布限制](docs/release-limitations.zh-CN.md) |
 | AI 指令层级 | [Instructions](AGENTS.md) | [AI 指令](AGENTS.zh-CN.md) |
-| 本地基础设施 | [Compose](deployments/compose/README.md) | [本地基础设施](deployments/compose/README.zh-CN.md) |
+| 本地基础设施与部署 | [Compose](deployments/compose/README.md) | [基础设施与部署](deployments/compose/README.zh-CN.md) |
 | Web 应用 | [Web](frontend/README.md) | [Web 应用](frontend/README.zh-CN.md) |
 
 ## 路线图
 
 1. **Registry MVP：**用户、会话、命名空间、组织、仓库、可见性、作用域令牌、
    Push/Pull、Tag 与 Artifact 元数据。
-2. **供应链安全：**Trivy 扫描、SBOM、Cosign 签名发现与验证、信任策略和安全
-   状态页面。
+2. **供应链安全：**已完成异步 Trivy 扫描、CycloneDX SBOM、Cosign 验证、版本化
+   Namespace Trust 评估，以及经授权 API/Web 证据视图；Pull 阻断按决策继续延期。
 3. **运营能力：**Robot Account、访问令牌、配额、审计日志、Webhook、删除、
    垃圾回收、复制与代理缓存。
 4. **公网服务准备：**邮箱验证、密码找回、MFA、滥用防护、计费、高可用与多区域

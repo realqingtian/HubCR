@@ -8,6 +8,7 @@ import (
 
 	"hubcr.io/hubcr/internal/modules/artifacts"
 	"hubcr.io/hubcr/internal/modules/repositories"
+	"hubcr.io/hubcr/internal/modules/security"
 )
 
 const (
@@ -27,7 +28,8 @@ func TestNotificationServiceReconcilesSupportedManifestPushes(t *testing.T) {
 		},
 	}}
 	reconciler := &notificationArtifactReconciler{}
-	service, err := NewNotificationService(resolver, reconciler)
+	scheduler := &notificationSecurityScheduler{}
+	service, err := NewNotificationService(resolver, reconciler, scheduler)
 	if err != nil {
 		t.Fatalf("NewNotificationService() error = %v", err)
 	}
@@ -74,6 +76,10 @@ func TestNotificationServiceReconcilesSupportedManifestPushes(t *testing.T) {
 	if len(reconciler.observations) != 2 {
 		t.Fatalf("reconciliation count = %d, want 2", len(reconciler.observations))
 	}
+	if len(scheduler.targets) != 2 || scheduler.targets[0].RepositoryPath() != "team/image" ||
+		scheduler.targets[0].Digest.String() != notificationManifestDigest {
+		t.Fatalf("security targets = %#v", scheduler.targets)
+	}
 	manifest := reconciler.observations[0]
 	if manifest.RepositoryID != "repository-id" || manifest.Kind != string(artifacts.KindManifest) ||
 		manifest.Tag == nil || *manifest.Tag != "latest" || manifest.Descriptors != nil ||
@@ -96,7 +102,7 @@ func TestNotificationServiceLeavesEmptyIndexReferencesUnknown(t *testing.T) {
 		contexts: map[string]repositories.AuthorizationContext{
 			"team/image": {Repository: repositories.Repository{ID: "repository-id"}},
 		},
-	}, reconciler)
+	}, reconciler, &notificationSecurityScheduler{})
 	if err != nil {
 		t.Fatalf("NewNotificationService() error = %v", err)
 	}
@@ -116,7 +122,9 @@ func TestNotificationServiceLeavesEmptyIndexReferencesUnknown(t *testing.T) {
 }
 
 func TestNotificationServiceRejectsInvalidRelevantEvent(t *testing.T) {
-	service, err := NewNotificationService(&serviceRepositoryResolver{}, &notificationArtifactReconciler{})
+	service, err := NewNotificationService(
+		&serviceRepositoryResolver{}, &notificationArtifactReconciler{}, &notificationSecurityScheduler{},
+	)
 	if err != nil {
 		t.Fatalf("NewNotificationService() error = %v", err)
 	}
@@ -172,7 +180,9 @@ func TestNotificationServiceClassifiesDependencies(t *testing.T) {
 	}
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
-			service, err := NewNotificationService(test.resolver, test.reconciler)
+			service, err := NewNotificationService(
+				test.resolver, test.reconciler, &notificationSecurityScheduler{},
+			)
 			if err != nil {
 				t.Fatalf("NewNotificationService() error = %v", err)
 			}
@@ -183,9 +193,45 @@ func TestNotificationServiceClassifiesDependencies(t *testing.T) {
 	}
 }
 
+func TestNotificationServiceMakesSecuritySchedulingRetryable(t *testing.T) {
+	service, err := NewNotificationService(
+		&serviceRepositoryResolver{contexts: map[string]repositories.AuthorizationContext{
+			"team/image": {Repository: repositories.Repository{ID: "repository-id"}},
+		}},
+		&notificationArtifactReconciler{},
+		&notificationSecurityScheduler{err: security.ErrUnavailable},
+	)
+	if err != nil {
+		t.Fatalf("NewNotificationService() error = %v", err)
+	}
+	_, err = service.Process(context.Background(), NotificationEnvelope{Events: []NotificationEvent{{
+		Timestamp: time.Now(), Action: NotificationActionPush,
+		Target: NotificationTarget{
+			MediaType: OCIImageManifestMediaType, Digest: notificationManifestDigest,
+			Repository: "team/image",
+		},
+	}}})
+	if !errors.Is(err, ErrNotificationUnavailable) {
+		t.Fatalf("Process() error = %v, want ErrNotificationUnavailable", err)
+	}
+}
+
 type notificationArtifactReconciler struct {
 	observations []artifacts.Observation
 	err          error
+}
+
+type notificationSecurityScheduler struct {
+	targets []security.Target
+	err     error
+}
+
+func (s *notificationSecurityScheduler) EnsureWorkflow(
+	_ context.Context,
+	target security.Target,
+) (security.Workflow, bool, error) {
+	s.targets = append(s.targets, target)
+	return security.Workflow{}, true, s.err
 }
 
 func (r *notificationArtifactReconciler) ReconcileArtifact(

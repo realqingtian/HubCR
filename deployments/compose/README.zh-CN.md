@@ -1,11 +1,12 @@
-# 本地基础设施
+# 本地基础设施与单机部署
 
 [English](README.md) | **简体中文**
 
 该 Compose 配置用于在本地开发环境启动 PostgreSQL、Redis、MinIO、CNCF
 Distribution 与本地 Gateway。Distribution 强制使用带 Scope 的 Bearer Token：Gateway
-把 `/v2/` 路由到 Distribution，把 `/token` 路由到独立运行的 Go 控制面。API、Worker
-和 Web 应用不在 Compose 中启动，以便各进程使用原生热更新。
+把 `/v2/` 路由到 Distribution，把 `/token` 路由到独立运行的 Go 控制面。默认开发
+工作流中，API、Worker 与 Web 应用保留在 Compose 外，以便使用原生热更新；生产覆盖
+文件会添加这些服务。
 
 Registry 默认使用宿主机 `5000` 端口，可通过 `HUBCR_REGISTRY_PORT` 修改。在
 macOS 上，AirPlay 接收器可能通过 `ControlCenter` 进程占用 `5000` 端口。遇到该
@@ -50,6 +51,35 @@ API 与 Distribution 通知 Endpoint 还必须获得相同的 `HUBCR_REGISTRY_EV
 - Go 控制面：`http://localhost:8080`
 
 覆盖端口后，请使用配置的 `HUBCR_REGISTRY_PORT` 代替 `5000`。
+
+## 受支持的单机 Compose 部署
+
+获批 MVP 目标将该基础文件与 `compose.production.yaml` 组合。它会构建 Go
+API/Worker/Migration 镜像与独立 Next.js 镜像，移除全部基础设施宿主端口，默认只把
+Gateway 发布到 `127.0.0.1`。受信任且由运维人员管理的 HTTPS 反向代理必须把公开
+Origin 转发到该监听地址。
+
+把 `.env.production.example` 复制为已忽略的 `.env.production`，替换全部必填空值，
+提供单独保护的 Registry Key 与 Event Secret，然后运行：
+
+```bash
+make prod-config
+make prod-build
+make prod-up
+make prod-status
+```
+
+Worker 使用与 API 相同且必填的 `HUBCR_DATABASE_URL`，只在 PostgreSQL 健康后启动。
+租约必须长于单次尝试超时；示例文件显式给出轮询、租约、超时、关闭、重试与并发边界。
+生产 Worker 包含固定 Digest 的 Trivy 0.72.0 与 Cosign 3.0.6，使用专用非权威 Cache/
+Scratch 路径，以只读方式挂载 Registry 签名目录来签发短期、精确 Repository 的 Pull
+Token，并周期修复缺失的 Artifact 安全 Workflow。
+生产启动仍必须通过 `make prod-up` 中的 `make prod-migrate`，在应用进程使用新 Schema
+前完成迁移。
+
+生产启动绝不会创建签名 Key 或 Secret。镜像保留可读 Tag，同时固定到不可变 Manifest
+Digest。完整部署、维护窗口备份、破坏性恢复、迁移、升级与恢复验收流程参见
+[MVP 运维指南](../../docs/operator-guide.zh-CN.md)。
 
 本地 Make 工作流已启用 Registry Token 认证及经过认证的 Distribution Push 事件投递。
 Manifest 与 Index 事件会在 PostgreSQL 中协调 Artifact 与当前 Tag 元数据。Pull、Delete
@@ -115,6 +145,17 @@ Registry 3 与 Nginx 1.29。自动化矩阵使用隔离宿主端口 `55001` 与 
 Artifact/Tag 及 Artifact API 检查均通过。
 同一隔离运行环境现也通过 Challenge/Token/通知遥测、Distribution 队列可见性、有界
 指标及日志不泄露 Secret 的断言；Distribution Debug Listener 使用宿主端口 `55002`。
+
+2026-08-08，`make test-m3-backup-restore-e2e` 还构建了完整单机生产拓扑，Push Private
+与 Public 镜像，停止写入服务，创建 PostgreSQL 加 Registry 对象备份，只删除隔离测试
+卷，轮换单独保护的 Registry 签名材料，恢复并迁移数据，然后验证登录、Private Pull、
+Artifact/Tag 状态与不变 Digest。
+
+2026-08-09，`make test-m4-security-e2e` 构建同一生产拓扑，Push 漏洞与干净 Fixture，
+在 Worker 停止时持久化四个 Job，演练 Registry 故障重试，并验证 Scan/SBOM 证据、
+可信、不可信、无效、Attested 与未签名 Signature、两个 Policy 版本、经授权 API 输出，
+以及 Trivy/Cosign 版本。Distribution 使用 Warn 日志级别，避免启动输出回显已配置的
+通知 Authorization Header。
 
 macOS 上的 `ControlCenter` 可能占用 `5000` 端口；应为 `infra-up`、`dev-api` 与
 `infra-smoke` 统一传入其他 `HUBCR_REGISTRY_PORT`。这属于宿主端口冲突，不是 OCI

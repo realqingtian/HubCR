@@ -84,7 +84,7 @@ export function AuthenticatedShell({ children }: Readonly<{ children: React.Reac
             <span className="block text-xs text-slate-500">Container Registry</span>
           </span>
         </Link>
-        <span className="rounded-full border border-sky-200 bg-sky-50 px-3 py-1 text-xs font-semibold text-sky-700">Registry MVP · M3 in progress</span>
+        <span className="rounded-full border border-sky-200 bg-sky-50 px-3 py-1 text-xs font-semibold text-sky-700">Supply-chain security · M4</span>
       </header>
       {content}
       <footer className="mt-10 border-t border-slate-200 py-6 text-xs leading-5 text-slate-500">

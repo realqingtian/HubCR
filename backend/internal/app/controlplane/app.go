@@ -18,6 +18,7 @@ import (
 	"hubcr.io/hubcr/internal/modules/organizations"
 	"hubcr.io/hubcr/internal/modules/registry"
 	"hubcr.io/hubcr/internal/modules/repositories"
+	"hubcr.io/hubcr/internal/modules/security"
 	"hubcr.io/hubcr/internal/platform/config"
 	"hubcr.io/hubcr/internal/platform/httpapi"
 	"hubcr.io/hubcr/internal/platform/httpapi/artifacthandler"
@@ -26,6 +27,7 @@ import (
 	"hubcr.io/hubcr/internal/platform/httpapi/registryeventhandler"
 	"hubcr.io/hubcr/internal/platform/httpapi/registryhandler"
 	"hubcr.io/hubcr/internal/platform/httpapi/repositoryhandler"
+	"hubcr.io/hubcr/internal/platform/httpapi/securityhandler"
 	"hubcr.io/hubcr/internal/platform/httpserver"
 	"hubcr.io/hubcr/internal/platform/observability"
 	"hubcr.io/hubcr/internal/platform/postgres"
@@ -33,6 +35,7 @@ import (
 	"hubcr.io/hubcr/internal/platform/postgres/authstore"
 	"hubcr.io/hubcr/internal/platform/postgres/organizationstore"
 	"hubcr.io/hubcr/internal/platform/postgres/repositorystore"
+	"hubcr.io/hubcr/internal/platform/postgres/securitystore"
 	"hubcr.io/hubcr/internal/platform/registryauth"
 )
 
@@ -112,9 +115,27 @@ func New(ctx context.Context, cfg config.API, logger *slog.Logger) (*App, error)
 		return nil, fmt.Errorf("initialize Artifact HTTP handler: %w", err)
 	}
 	artifacthandler.RegisterRoutes(router, artifactHandler)
+	securityStore := securitystore.New(database.ORM())
+	securityService, err := security.NewService(securityStore, time.Now)
+	if err != nil {
+		database.Close()
+		return nil, fmt.Errorf("initialize security workflow service: %w", err)
+	}
+	trustService, err := security.NewTrustService(securityStore, time.Now)
+	if err != nil {
+		database.Close()
+		return nil, fmt.Errorf("initialize trust workflow service: %w", err)
+	}
+	securityHandler, err := securityhandler.New(authService, repositoryService, securityService)
+	if err != nil {
+		database.Close()
+		return nil, fmt.Errorf("initialize security result HTTP handler: %w", err)
+	}
+	securityhandler.RegisterRoutes(router, securityHandler)
 	if cfg.Registry.Enabled {
 		if err := registerRegistryRoutes(
-			router, cfg.Registry, authService, repositoryService, policy, artifactService, logger,
+			router, cfg.Registry, authService, repositoryService, policy, artifactService,
+			&registrySecurityScheduler{scan: securityService, trust: trustService}, logger,
 		); err != nil {
 			database.Close()
 			return nil, err
@@ -135,6 +156,7 @@ func registerRegistryRoutes(
 	repositoryService *repositories.Service,
 	policy authorization.Policy,
 	artifactService *artifacts.Service,
+	securityScheduler registry.SecurityWorkflowScheduler,
 	logger *slog.Logger,
 ) error {
 	metrics := observability.NewRegistryMetrics()
@@ -185,7 +207,9 @@ func registerRegistryRoutes(
 		return fmt.Errorf("initialize Registry token handler: %w", err)
 	}
 	registryhandler.RegisterRoutes(router, handler)
-	notificationService, err := registry.NewNotificationService(repositoryService, artifactService)
+	notificationService, err := registry.NewNotificationService(
+		repositoryService, artifactService, securityScheduler,
+	)
 	if err != nil {
 		return fmt.Errorf("initialize Registry notification service: %w", err)
 	}
@@ -197,6 +221,26 @@ func registerRegistryRoutes(
 	}
 	registryeventhandler.RegisterRoutes(router, eventHandler)
 	return nil
+}
+
+type registrySecurityScheduler struct {
+	scan  *security.Service
+	trust *security.TrustService
+}
+
+func (s *registrySecurityScheduler) EnsureWorkflow(
+	ctx context.Context,
+	target security.Target,
+) (security.Workflow, bool, error) {
+	workflow, created, err := s.scan.EnsureWorkflow(ctx, target)
+	if err != nil {
+		return security.Workflow{}, false, err
+	}
+	if _, _, err := s.trust.EnsureCurrentVerification(ctx, target); err != nil &&
+		!errors.Is(err, security.ErrNotFound) {
+		return security.Workflow{}, false, err
+	}
+	return workflow, created, nil
 }
 
 func (a *App) Run(ctx context.Context) error {

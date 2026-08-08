@@ -1,5 +1,5 @@
 map $uri $hubcr_route {
-    default other;
+    default web;
     ~^/v2/ registry;
     /token token;
     ~^/api/ api;
@@ -64,6 +64,10 @@ server {
     }
 
     location / {
-        return 404;
+        proxy_set_header Host $http_host;
+        proxy_set_header X-Forwarded-Host $http_host;
+        proxy_set_header X-Forwarded-Proto $scheme;
+        proxy_set_header X-Request-ID $request_id;
+        proxy_pass http://${HUBCR_GATEWAY_WEB_HOST}:${HUBCR_GATEWAY_WEB_PORT};
     }
 }

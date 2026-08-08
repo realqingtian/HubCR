@@ -4,7 +4,7 @@
 
 - Status: active living plan
 - Plan start: 2026-08-01
-- Current stage: Milestones 0–2 and M3-01 through M3-06 are done; M3-07 is blocked on the G-04 deployment and backup subset
+- Current stage: Milestone 4 exited; M4-01 through M4-05 are done, and Milestone 5 capabilities require separate prioritization and policy decisions
 - Requirements: [HubCR product requirements](requirements.md)
 
 This plan converts the product baseline into ordered, testable work. It is a delivery
@@ -53,13 +53,16 @@ product decisions, external reviews, or environment downloads.
 | Docker host | Docker Engine `29.6.2`, Compose `v5.3.1`, `linux/arm64` server | `docker --version`, `docker compose version`, `docker info` |
 | Compose definition | PostgreSQL 17, Redis 7, MinIO and Distribution 3 configuration parses successfully | `docker compose ... config --quiet` |
 | Compose runtime | Full stack smoke passes on Apple Silicon; the Registry host port can be overridden when macOS reserves `5000` | [Compose smoke evidence](../deployments/compose/README.md#verified-environment) |
-| Application integration | API owns a PostgreSQL pool and dependency-aware readiness; worker and Redis connections remain pending | Unit, live dependency-loss/recovery, and graceful-shutdown checks |
+| Application integration | API and worker own PostgreSQL pools; API has dependency-aware readiness and the worker has bounded leased execution; Redis application state remains pending | Unit, live dependency-loss/recovery, graceful-shutdown and worker restart checks |
 | Registry integration | Scoped token issuance, the token-protected local gateway, push-event reconciliation, authorized Artifact/Tag read APIs, and operational telemetry are complete | Go/PostgreSQL integration and Docker/OCI/API/telemetry acceptance tests |
 
-The project has completed Milestones 0 through 2 and M3-01 through M3-06. The
+The project has completed Milestones 0 through 3. The
 authenticated Web experience now covers navigation, policy-derived Quick-start,
 Artifact discovery, deterministic plus real-browser acceptance, and source-backed
-security remediation. M3-07 cannot start until the named G-04 subset is approved.
+security remediation. The named G-04 subset is approved, and the complete deployment,
+recovery rehearsal, and bilingual release documentation have evidence. The product
+owner moved the deferred job foundation to M4 and accepted D-007/D-008 on 2026-08-08,
+so the M3 exit audit is complete and M4 implementation is authorized.
 
 ## 3. Decision gates
 
@@ -71,13 +74,13 @@ The project owner approves product decisions; implementation work records them u
 | --- | --- | --- | --- |
 | G-01 Product entry | D-001 product mode, D-002 registration, D-003 initial identity | Session schema, login and registration UI | `CLOSED` on 2026-08-01; [accepted records](decisions/README.md#m0-decision-session) |
 | G-02 Authorization | D-004 organization roles, D-005 grant inheritance, D-006 public pull | Membership schema, authorization service, Registry tokens | `CLOSED` on 2026-08-01; [accepted records](decisions/README.md#m0-decision-session) |
-| G-03 Security policy | D-007 pull enforcement, D-008 signature trust | Scan policy and signature-verification contracts | `PLANNED` before Milestone 4 |
-| G-04 Operations | D-009 production target, D-010 operating policy | Production deployment, deletion, retention, GC and backups | `BLOCKED` for M3-07 until the supported MVP deployment and backup subset is approved |
+| G-03 Security policy | D-007 pull enforcement, D-008 signature trust | Scan policy and signature-verification contracts | `CLOSED` on 2026-08-08; [accepted records](decisions/README.md#m4-security-decision-session) |
+| G-04 Operations | D-009 production target, D-010 operating policy | Production deployment, deletion, retention, GC and backups | `CLOSED` on 2026-08-08 for the [M3-07 single-host Compose and backup subset](decisions/README.md#m3-operations-decision-session); lifecycle policy remains deferred |
 | G-05 Open source | D-011 license | First public release | `BLOCKED` before public release |
 
 Decision records must state context, chosen option, rejected alternatives,
-consequences, and the date. G-01 and G-02 are closed; later gates still constrain their
-respective milestones.
+consequences, and the date. G-01 through G-04 are closed for their recorded scope;
+later gates still constrain their respective milestones.
 
 ## 4. Milestone map
 
@@ -398,8 +401,8 @@ evidence without claiming supply-chain security features.
 | M3-04 | `DONE` | Playwright journeys for login, organization, repository and artifact discovery | M3-01–03 |
 | M3-05 | `DONE` | OCI acceptance runner in CI or a documented integration environment | M2-08 |
 | M3-06 | `DONE` | Threat-model review and remediation for sessions, authorization and token exchange | M1, M2 |
-| M3-07 | `BLOCKED` | Backup/restore and migration rehearsal for the supported MVP deployment | G-04 subset, M2 |
-| M3-08 | `PLANNED` | Bilingual operator, API and user documentation plus release limitations | M3-01–07 |
+| M3-07 | `DONE` | Backup/restore and migration rehearsal for the supported MVP deployment | G-04 subset, M2 |
+| M3-08 | `DONE` | Bilingual operator, API and user documentation plus release limitations | M3-01–07 |
 
 M3-01 evidence on 2026-08-01 includes a shared authenticated Shell and typed dynamic
 routes for Namespace discovery and Repository Detail. Route parameters reuse the
@@ -454,30 +457,112 @@ repository gate provide the acceptance evidence. The
 still needs shared Redis state, capacity needs deployment load testing, and no G-04
 production or backup choice is implied.
 
+M3-07 evidence on 2026-08-08 includes accepted D-009/D-010 records, digest-pinned
+non-root API and standalone Web images, a production Compose override that publishes
+only a loopback gateway, explicit migration ordering, and fail-safe manual backup and
+restore commands. `make test-m3-backup-restore-e2e` builds and starts that complete
+topology, Pushes public and private images, stops every write service, checksums a
+PostgreSQL plus Registry-object backup, deletes only isolated volumes, rotates the
+separately protected Registry key, restores into clean volumes, applies current
+migrations, and proves login, private Pull, Artifact/Tag state, and unchanged Digest.
+
+M3-08 evidence on 2026-08-08 includes synchronized operator and user guides, API
+entry-point documentation, release limitations, deployment instructions, requirements,
+architecture, threat model, and README status. The documentation explicitly excludes
+account bootstrap, supply-chain security, lifecycle operations, Kubernetes, high
+availability, automated backup, numeric RPO/RTO, and untested host compatibility.
+`make check-docs` validates all 67 bilingual Markdown files and local links.
+
 M3 exits only when every Registry MVP acceptance criterion in
 [requirements section 9](requirements.md#9-registry-mvp-acceptance-criteria) has
 recorded evidence. Security cards in the UI must remain absent or clearly marked as
 unavailable; planned scan or signature states must not be fabricated.
 
+The 2026-08-08 exit audit initially found that section 9 placed the deferred job
+foundation in M3 while M4 owned its implementation. The product owner approved moving
+that criterion to M4 and accepted D-007/D-008 on the same date. The synchronized
+requirements now retain only the implemented Registry MVP foundations in M3, all M3
+acceptance evidence is recorded above, and Milestone 3 is exited.
+
 ## 9. Milestone 4 — supply-chain security
 
 Start only after G-03 is approved and the Registry MVP is stable.
 
-1. Add a PostgreSQL job table with atomic claim, lease, retry, backoff and dead-letter
-   semantics.
-2. Enqueue one scan intent per repository/artifact digest policy and make duplicate
-   events safe.
-3. Integrate Trivy in the worker; record scanner and vulnerability database versions.
-4. Store normalized findings and expose queued, running, completed, failed and stale
-   states.
-5. Generate or ingest SBOMs keyed to artifact digest.
-6. Discover Cosign signatures/attestations through OCI relationships.
-7. Separate signature presence, cryptographic validity and policy trust in storage,
-   API and UI.
-8. Version trust policies and re-verify affected artifacts after policy changes.
-9. Add retry, cancellation, timeout, concurrency, database-update and stale-result
-   integration tests.
-10. Only after evidence exists, evaluate pull enforcement as a separate policy change.
+The 2026-08-08 readiness audit found only a cancellable worker scaffold and migrations
+through `000006_artifact_metadata`. M4-01 through M4-05 have since supplied the durable
+job engine, Trivy scan/SBOM workflows, Cosign verification, versioned trust evaluation,
+the authorized security API and Web experience, migrations through
+`000009_signature_trust`, and a reproducible real-runtime exit runner.
+
+The approved execution plan is:
+
+| ID | State | Result | Acceptance evidence |
+| --- | --- | --- | --- |
+| M4-00 | `DONE` | Move the deferred job foundation to M4 and accept D-007/D-008 | Accepted bilingual decisions, synchronized requirements, closed G-03 and recorded M3 exit audit |
+| M4-01 | `DONE` | PostgreSQL-backed bounded job engine owned by a jobs module and composed by the worker | Empty-database migration; atomic claim; unique intent; lease expiry/reclaim; bounded concurrency; deterministic retry/backoff; cancellation; terminal dead-letter; crash/restart integration tests |
+| M4-02 | `DONE` | Digest-bound Trivy scan and SBOM jobs with truthful status and version evidence | Duplicate Registry events produce one current intent; notification-to-job crash gap is repaired; pinned scanner execution; vulnerable/clean fixtures; scanner/database versions; queued/running/completed/failed/stale API tests |
+| M4-03 | `DONE` | Cosign discovery, cryptographic verification and versioned trust evaluation | Signed, unsigned, invalid, valid-untrusted and valid-trusted fixtures; exact key and keyless identity checks; dependency-unavailable state; policy-change re-verification; immutable historical evidence |
+| M4-04 | `DONE` | Truthful Artifact security Web UI on the existing repository-authorized API | Zod contract tests; loading/absent/queued/running/failed/stale/unavailable/invalid/untrusted/trusted UI states; keyboard/mobile checks; no client-side trust inference |
+| M4-05 | `DONE` | Reproducible supply-chain-security acceptance runner and M4 exit audit | Real OCI Push, scan/SBOM, signature matrix, retry/restart, policy re-evaluation, database migration, `make check`, and documented runtime/tool versions |
+
+M4-01 must use PostgreSQL as the authoritative queue without introducing an external
+broker. Module interfaces own job and security behavior; PostgreSQL, Registry, Trivy,
+and Cosign adapters remain in platform packages. Claims must be atomic and leased,
+handlers idempotent, attempts bounded, and process shutdown must stop new claims while
+bounding active work.
+
+M4-01 evidence on 2026-08-08 includes migration `000007_job_foundation`, the jobs
+module, atomic PostgreSQL `SKIP LOCKED` claims, unique intent persistence, lease-expiry
+reclaim, deterministic retry/backoff, terminal dead-letter state, bounded worker
+concurrency, cancellation, and secret-safe outcome logging. Unit tests prove domain,
+handler, configuration, concurrency and shutdown behavior. Isolated PostgreSQL tests
+prove concurrent enqueue/claim, lease ownership, retry exhaustion and a stopped worker
+being reclaimed and completed by a new worker instance. `make check`,
+`make test-integration`, and the clean-volume production Compose backup/restore runner
+all pass with the worker connected and the new migration applied.
+
+M4-02 evidence on 2026-08-09 includes `000008_security_scan`, unique digest-bound
+scan/SBOM intents, periodic repair of the Artifact-to-workflow crash gap, exact-scope
+internal Pull tokens, a digest-pinned Trivy 0.72.0 binary, bounded output parsing,
+normalized findings, CycloneDX JSON, scanner/database version evidence, and the
+repository-authorized security endpoint with private `404` non-disclosure. Unit and
+isolated PostgreSQL tests cover all truthful job/result states. The real
+`make test-m4-security-e2e` runner Pushes vulnerable and clean fixtures through the
+production topology and proves two workflows, four unique jobs, vulnerability and
+zero-finding results, two SBOMs, and recorded scanner/database versions.
+
+M4-03 evidence on 2026-08-09 includes `000009_signature_trust`, immutable versioned
+namespace trust policies, exact public-key and keyless identity rules, and bounded
+Cosign 3.0.6 execution with short-lived Registry credentials kept outside process
+arguments. The in-process verifier supports ECDSA, RSA, and Ed25519 public keys and
+keeps cryptographic validity separate from policy trust. Unit and PostgreSQL tests
+cover signed, unsigned, invalid, unavailable, unverified, trusted, untrusted, stale,
+and policy re-evaluation states while preserving historical evidence.
+
+M4-04 evidence on 2026-08-09 includes the repository-authorized signature contract,
+strict Zod validation, TanStack Query integration, and the Artifact security panel.
+Frontend unit tests, type checking, linting, the production build, and 13 Playwright
+journeys pass; browser inspection confirms keyboard refresh, desktop layout, and a
+390-pixel mobile viewport without horizontal overflow.
+
+M4-05 evidence on 2026-08-09 includes the real production-topology runner. It proves
+four durable jobs remain queued while the worker is stopped, one retry survives a
+Registry outage, vulnerable and clean scan/SBOM results complete, trusted, untrusted,
+invalid, attested, and unsigned signature states remain distinct, two immutable
+policy versions trigger re-evaluation, the authorized API returns the second policy
+result, and Trivy/Cosign versions are recorded.
+
+M4-02 and M4-03 store results by repository plus immutable Artifact Digest. Scan
+records include scanner and vulnerability-database versions; signature records keep
+signature identity, signer evidence, cryptographic validity, policy trust, policy
+version, verification time, and a machine-readable reason. Missing or unavailable
+evidence never becomes a successful zero value.
+
+M4-04 adds public contracts only after the corresponding persistence semantics are
+tested. Reads reuse repository discovery authorization before security storage access;
+the Web consumes Zod-validated responses through TanStack Query and does not recreate
+policy decisions. Under D-007, all M4 security work remains asynchronous
+and informational. Pull enforcement remains a later, separately approved change.
 
 Exit evidence includes a signed test image, an unsigned image, an invalid signature,
 an untrusted valid signature, a trusted valid signature, a vulnerable image, job
@@ -503,13 +588,9 @@ operator workflow, and failure-recovery test. This milestone is not a single rel
 
 ## 11. Immediate execution queue
 
-This is the recommended order from the current repository state:
-
-1. **Close the G-04 subset required by M3-07:** approve the supported MVP deployment
-   and backup/restore scope before implementing a rehearsal.
-2. **Implement M3-07 and M3-08 after that decision:** prove migration plus
-   backup/restore, then consolidate bilingual operator, API, user, and release-limit
-   documentation.
+Milestone 4 is complete. Select and approve one independently scoped Milestone 5
+capability before implementation. D-007 continues to keep scan and trust results
+informational; Pull enforcement requires a separate product decision.
 
 Keep commits small enough that one work package and its tests can be reviewed together.
 

@@ -25,16 +25,22 @@ Go 控制面 --> PostgreSQL
 - `backend/internal/platform`：配置与基础设施适配器
 - `backend/internal/modules/registry`：Registry Token 与 Distribution 事件业务契约
 - `backend/internal/modules/artifacts`：Artifact/Tag 校验与持久化契约
+- `backend/internal/modules/jobs`：持久化 Intent、租约、重试与 Handler 契约
+- `backend/internal/modules/security`：绑定 Digest 的扫描/SBOM Workflow、结果与工具版本契约
 - `backend/internal/platform/httpapi/artifacthandler`：经过授权的 Artifact/Tag 读取 Adapter
+- `backend/internal/platform/httpapi/securityhandler`：经过授权的 Artifact 安全状态 Adapter
 - `backend/internal/platform/httpapi/registryeventhandler`：经过认证的内部事件 Adapter
 - `backend/internal/platform/observability`：有界进程指标及内部 Exposition Adapter
 - `backend/internal/platform/postgres/artifactstore`：GORM/PostgreSQL Artifact Adapter
+- `backend/internal/platform/postgres/jobstore`：PostgreSQL 原子 Job Adapter
+- `backend/internal/platform/postgres/securitystore`：事务式 Workflow 与扫描/SBOM 证据 Adapter
+- `backend/internal/platform/scanner/trivy`：受限且固定版本的 Trivy 进程 Adapter
 - `backend/migrations`：PostgreSQL 数据库迁移
 - `frontend/app`：Next.js 路由与布局
 - `frontend/features`：产品功能代码
 - `frontend/lib`：共享的类型化 API 客户端与工具
 - `frontend/providers`：应用级客户端 Provider
-- `deployments/compose`：本地基础设施
+- `deployments/compose`：本地基础设施与获批单机部署
 
 当前 Web 路由边界使用共享登录态 Shell 包裹 `/`、`/namespaces/[namespace]` 与
 `/namespaces/[namespace]/repositories/[repository]`，并在 Repository 路由下通过
@@ -59,14 +65,25 @@ Feature；Route 不拥有授权决策。Artifact Client 使用 Zod 校验每个�
 9. 认证模块拥有密码尝试准入。Web Login 与 Registry Basic Authentication 在执行
    Argon2 前汇聚到同一个有界进程内 Limiter 与并发门；未来多副本部署必须使用获批的
    Redis 共享 Adapter 替换该状态。
+10. Jobs 模块拥有唯一 Intent 与生命周期转换。PostgreSQL 使用 `SKIP LOCKED` 原子领取
+    到期或租约过期的工作；Handler 保持有界、可取消且幂等，Worker 停止后由租约保证
+    安全回收。
+11. Artifact 协调为每个不可变 Repository/Digest 对确保唯一 Scan 与 SBOM Intent。
+    周期 Repair 关闭 Artifact 持久化后的崩溃间隙。Worker 只获得短期、精确 Repository
+    的 Pull Token；扫描器输出与 Cache 是非权威输入，必须经过校验后写入 PostgreSQL
+    证据。
 
-本地基础设施边界把 Go Listener 与每个 Compose 发布端口绑定到 `127.0.0.1`。
-Registry Streaming Timeout 只作用于 `/v2/`；Token 与业务 API Route 使用有界且带
-缓冲的 Proxy 行为。已审查攻击路径与剩余部署限制见
+本地基础设施边界把 Go Listener 与每个 Compose 发布端口绑定到 `127.0.0.1`。生产
+覆盖文件添加 API、Worker、Migration 与 Web Container，移除基础设施宿主端口，并只
+发布位于必需运维 HTTPS 反向代理之后的 Loopback Gateway。PostgreSQL 与 MinIO 是
+持久化恢复边界；MVP 中 Redis 不保存权威状态。Registry Streaming Timeout 只作用于
+`/v2/`；Token 与业务 API Route 使用有界且带缓冲的 Proxy 行为。已审查攻击路径与
+剩余部署限制见
 [Registry MVP 威胁模型](security-threat-model.zh-CN.md)。
 
 ## 延后确认的产品决策
 
-当前骨架不会擅自确定注册策略、组织角色、仓库级权限继承、Pull 阻断策略、
-签名信任根或最终部署目标。这些决策会影响数据库结构与 API 契约，必须在实现
-对应模块之前确认。
+注册策略、组织角色、Grant 继承、Public Pull、首版信息展示安全策略、签名信任、首个
+部署目标与 MVP 备份子集现在已有获批记录。后续 Pull 阻断策略、删除、保留、垃圾回收、
+配额、Audit、数值化灾难恢复目标、Kubernetes 与公开发布许可证仍保持开放，依赖实现
+前必须确认。

@@ -1,0 +1,4 @@
+services:
+  postgres:
+    ports:
+      - "127.0.0.1:${HUBCR_POSTGRES_PORT:-55435}:5432"

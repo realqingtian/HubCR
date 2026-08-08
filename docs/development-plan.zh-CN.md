@@ -4,7 +4,7 @@
 
 - 状态：持续维护中的有效计划
 - 计划开始：2026-08-01
-- 当前阶段：里程碑 0–2 及 M3-01 至 M3-06 已完成；M3-07 被 G-04 的部署与备份子集阻塞
+- 当前阶段：里程碑 4 已退出；M4-01 至 M4-05 均已完成，里程碑 5 能力需要分别确定优先级并完成策略决策
 - 需求基线：[HubCR 产品需求](requirements.zh-CN.md)
 
 本计划将产品基线转化为有顺序、可测试的工作项。它是一份交付管理文档：完成工作后
@@ -45,12 +45,14 @@
 | Docker 宿主 | Docker Engine `29.6.2`、Compose `v5.3.1`、`linux/arm64` Server | `docker --version`、`docker compose version`、`docker info` |
 | Compose 定义 | PostgreSQL 17、Redis 7、MinIO、Distribution 3 配置可成功解析 | `docker compose ... config --quiet` |
 | Compose 运行 | 完整 Stack 已在 Apple Silicon 通过冒烟测试；macOS 占用 `5000` 时可覆盖 Registry 宿主端口 | [Compose 冒烟证据](../deployments/compose/README.zh-CN.md#已验证环境) |
-| 应用集成 | API 已持有 PostgreSQL 连接池并提供依赖感知就绪检查；Worker 与 Redis 连接仍待实现 | 单元测试、实时依赖中断/恢复及优雅退出检查 |
+| 应用集成 | API 与 Worker 均持有 PostgreSQL 连接池；API 提供依赖感知就绪检查，Worker 提供有界租约执行；Redis 应用状态仍待实现 | 单元测试、实时依赖中断/恢复、优雅退出与 Worker 重启检查 |
 | Registry 集成 | Scoped Token 签发、受 Token 保护的本地 Gateway、Push 事件协调、经过授权的 Artifact/Tag 读取 API 及运维遥测已完成 | Go/PostgreSQL 集成测试与 Docker/OCI/API/遥测验收测试 |
 
-项目已完成里程碑 0 至 2 及 M3-01 至 M3-06。登录态 Web 体验现已覆盖导航、Policy
+项目已完成里程碑 0 至 3。登录态 Web 体验现已覆盖导航、Policy
 派生的 Quick-start、Artifact 发现、稳定和真实浏览器验收，以及具有源码证据的安全
-整改。命名的 G-04 子集获批前不能启动 M3-07。
+整改。命名的 G-04 子集已经获批，完整部署、恢复演练与双语发布文档已有证据。产品
+负责人于 2026-08-08 把延期 Job Foundation 移至 M4 并接受 D-007/D-008，因此 M3
+退出审计已经完成，M4 实现已获授权。
 
 ## 3. 决策门
 
@@ -61,12 +63,12 @@
 | --- | --- | --- | --- |
 | G-01 产品入口 | D-001 产品模式、D-002 注册方式、D-003 首期身份 | 会话结构、登录与注册 UI | 2026-08-01 `CLOSED`；[已获批记录](decisions/README.zh-CN.md#m0-决策会议) |
 | G-02 授权 | D-004 组织角色、D-005 权限继承、D-006 公开 Pull | 成员结构、授权服务、Registry Token | 2026-08-01 `CLOSED`；[已获批记录](decisions/README.zh-CN.md#m0-决策会议) |
-| G-03 安全策略 | D-007 Pull 执行、D-008 签名信任 | 扫描策略与验签契约 | `PLANNED`，里程碑 4 前确认 |
-| G-04 运维 | D-009 生产目标、D-010 运维策略 | 生产部署、删除、保留、GC 与备份 | 受支持 MVP 部署与备份子集获批前，M3-07 为 `BLOCKED` |
+| G-03 安全策略 | D-007 Pull 执行、D-008 签名信任 | 扫描策略与验签契约 | 2026-08-08 `CLOSED`；[已获批记录](decisions/README.zh-CN.md#m4-安全决策会议) |
+| G-04 运维 | D-009 生产目标、D-010 运维策略 | 生产部署、删除、保留、GC 与备份 | [M3-07 单机 Compose 与备份子集](decisions/README.zh-CN.md#m3-运维决策会议)已于 2026-08-08 `CLOSED`；生命周期策略仍延期 |
 | G-05 开源 | D-011 许可证 | 第一次公开发布 | `BLOCKED`，公开发布前确认 |
 
-决策记录必须说明背景、选项、被否决方案、后果和日期。G-01 与 G-02 已关闭；后续
-决策门仍约束各自对应的里程碑。
+决策记录必须说明背景、选项、被否决方案、后果和日期。G-01 至 G-04 已在记录范围内
+关闭；后续决策门仍约束各自对应的里程碑。
 
 ## 4. 里程碑总览
 
@@ -346,8 +348,8 @@ Web，并在 Chromium 中证明已 Push 的 `smoke` Tag 与不可变 Digest 可�
 | M3-04 | `DONE` | 登录、组织、仓库与 Artifact 发现的 Playwright 流程 | M3-01–03 |
 | M3-05 | `DONE` | 在 CI 或文档化集成环境运行 OCI 验收 | M2-08 |
 | M3-06 | `DONE` | 会话、授权和 Token 交换的威胁模型审查与整改 | M1、M2 |
-| M3-07 | `BLOCKED` | 受支持 MVP 部署的备份/恢复和迁移演练 | G-04 子集、M2 |
-| M3-08 | `PLANNED` | 双语运维、API、用户文档与发布限制 | M3-01–07 |
+| M3-07 | `DONE` | 受支持 MVP 部署的备份/恢复和迁移演练 | G-04 子集、M2 |
+| M3-08 | `DONE` | 双语运维、API、用户文档与发布限制 | M3-01–07 |
 
 M3-01 在 2026-08-01 的证据包括共享登录态 Shell，以及用于 Namespace Discovery 和
 Repository Detail 的类型化动态路由。Route Parameter 复用规范 OCI Name Schema；
@@ -390,24 +392,95 @@ Push-to-Web Runner 与完整仓库门禁构成验收证据。[威胁模型](secu
 记录了限制：多副本认证仍需要共享 Redis 状态，容量仍需按部署做负载测试，且没有暗示
 任何 G-04 生产或备份选择。
 
+M3-07 在 2026-08-08 的证据包括已接受 D-009/D-010 记录、固定 Digest 且非 Root 的
+API 镜像与 Standalone Web 镜像、只发布 Loopback Gateway 的生产 Compose 覆盖文件、
+显式迁移顺序，以及 Fail-safe 手动 Backup/Restore 命令。
+`make test-m3-backup-restore-e2e` 构建并启动完整拓扑，Push Public/Private 镜像，停止
+全部写入服务，为 PostgreSQL 加 Registry 对象备份生成 Checksum，只删除隔离卷，轮换
+单独保护的 Registry Key，恢复到干净卷，应用当前迁移，并证明登录、Private Pull、
+Artifact/Tag 状态与 Digest 不变。
+
+M3-08 在 2026-08-08 的证据包括同步的 Operator/User Guide、API 入口文档、Release
+Limitation、部署说明、Requirements、Architecture、Threat Model 与 README 状态。文档
+明确排除账号 Bootstrap、软件供应链安全、生命周期操作、Kubernetes、高可用、自动
+备份、数值化 RPO/RTO 与未测试 Host 兼容性。`make check-docs` 校验全部 67 份双语
+Markdown 与本地链接。
+
 只有[需求第 9 节](requirements.zh-CN.md#9-registry-mvp-验收标准)的所有 Registry MVP
 验收项都有证据时，M3 才能退出。UI 中的安全卡片必须不存在或明确标为不可用，绝不能
 伪造尚未实现的扫描或签名状态。
+
+2026-08-08 退出审计最初发现第 9 节把延期 Job Foundation 放在 M3，而其实现由 M4
+负责。产品负责人于同日批准把该条件移至 M4，并接受 D-007/D-008。同步后的需求只在
+M3 保留已经实现的 Registry MVP Foundation；上述全部 M3 验收证据均已记录，里程碑 3
+现已退出。
 
 ## 9. 里程碑 4——软件供应链安全
 
 仅在 G-03 获批且 Registry MVP 稳定后开始。
 
-1. 添加 PostgreSQL 任务表，具备原子领取、租约、重试、退避和死信语义。
-2. 按仓库/Artifact Digest 策略只创建一份扫描意图，并安全处理重复事件。
-3. 在 Worker 集成 Trivy，记录扫描器和漏洞数据库版本。
-4. 保存规范化漏洞结果，暴露排队、执行中、完成、失败和过期状态。
-5. 生成或导入绑定 Artifact Digest 的 SBOM。
-6. 通过 OCI 关系发现 Cosign 签名与证明材料。
-7. 在存储、API 和 UI 中分开表示签名存在、密码学有效与策略可信。
-8. 为信任策略设置版本，并在策略变化后重新验证受影响 Artifact。
-9. 添加重试、取消、超时、并发、数据库更新和结果过期集成测试。
-10. 只有证据充分后，才把 Pull 阻断作为独立策略变更评估。
+2026-08-08 的就绪审计发现当时只有可取消 Worker 骨架，迁移止于
+`000006_artifact_metadata`。此后 M4-01 至 M4-05 已提供持久化 Job 引擎、Trivy
+扫描/SBOM Workflow、Cosign 验证、版本化信任评估、经授权安全 API 与 Web 体验、
+直至 `000009_signature_trust` 的迁移，以及可复现的真实运行时退出 Runner。
+
+获批执行计划如下：
+
+| ID | 状态 | 交付结果 | 验收证据 |
+| --- | --- | --- | --- |
+| M4-00 | `DONE` | 把延期 Job Foundation 移至 M4，并接受 D-007/D-008 | 获批双语决策、同步需求、关闭 G-03，以及记录 M3 退出审计 |
+| M4-01 | `DONE` | 由 Jobs 模块拥有、Worker 组合的 PostgreSQL 有界任务引擎 | 空数据库迁移；原子领取；唯一 Intent；租约过期/回收；有界并发；确定性重试/退避；取消；最终死信；崩溃/重启集成测试 |
+| M4-02 | `DONE` | 绑定 Digest、状态与版本证据如实表达的 Trivy 扫描和 SBOM Job | 重复 Registry Event 只生成一个当前 Intent；修复通知到 Job 的崩溃间隙；固定扫描器执行；漏洞/干净 Fixture；扫描器/数据库版本；排队/执行中/完成/失败/过期 API 测试 |
+| M4-03 | `DONE` | Cosign 发现、密码学验证与版本化信任评估 | 已签名、未签名、无效、有效但不可信、有效且可信 Fixture；精确密钥与 Keyless 身份检查；依赖不可用状态；策略变更后重新验证；不可变历史证据 |
+| M4-04 | `DONE` | 基于现有 Repository 授权 API、如实表达的 Artifact 安全 Web UI | Zod 契约测试；Loading/Absent/Queued/Running/Failed/Stale/Unavailable/Invalid/Untrusted/Trusted UI 状态；键盘/移动端检查；客户端不推断信任 |
+| M4-05 | `DONE` | 可复现的软件供应链安全验收 Runner 与 M4 退出审计 | 真实 OCI Push、Scan/SBOM、签名矩阵、重试/重启、策略重新评估、数据库迁移、`make check`，以及记录运行时/工具版本 |
+
+M4-01 必须以 PostgreSQL 作为权威 Queue，不引入外部 Broker。模块接口拥有 Job 与安全
+行为；PostgreSQL、Registry、Trivy 和 Cosign Adapter 保持在 Platform Package。
+Claim 必须原子执行并具备租约，Handler 必须幂等，尝试次数必须有界；进程关闭时停止
+领取新任务，并对活动任务设置明确上限。
+
+M4-01 在 2026-08-08 的证据包括迁移 `000007_job_foundation`、Jobs 模块、PostgreSQL
+原子 `SKIP LOCKED` Claim、唯一 Intent 持久化、租约过期回收、确定性重试/退避、最终
+Dead-letter 状态、有界 Worker 并发、取消及不泄露 Secret 的 Outcome 日志。单元测试
+证明领域、Handler、配置、并发与关闭行为；隔离 PostgreSQL 测试证明并发 Enqueue/Claim、
+租约所有权、重试耗尽，以及停止的 Worker 可由新 Worker 实例回收并完成。
+`make check`、`make test-integration` 与干净卷生产 Compose Backup/Restore Runner 均在
+Worker 已连接且新迁移已应用的情况下通过。
+
+M4-02 在 2026-08-09 的证据包括 `000008_security_scan`、绑定 Digest 的唯一
+Scan/SBOM Intent、Artifact 到 Workflow 崩溃间隙的周期修复、精确 Scope 的内部 Pull
+Token、固定 Digest 的 Trivy 0.72.0、受限输出解析、规范化 Finding、CycloneDX JSON、
+扫描器/数据库版本证据，以及对 Private Repository 使用 `404` 不披露的经授权安全
+Endpoint。单元与隔离 PostgreSQL 测试覆盖全部如实表达的 Job/Result 状态。真实
+`make test-m4-security-e2e` Runner 通过生产拓扑 Push 漏洞与干净 Fixture，并证明两个
+Workflow、四个唯一 Job、漏洞与零 Finding 结果、两份 SBOM，以及已记录扫描器/数据库
+版本。
+
+M4-03 在 2026-08-09 的证据包括 `000009_signature_trust`、不可变版本化 Namespace
+信任策略、精确公钥与 Keyless 身份规则，以及有界的 Cosign 3.0.6 执行；短期 Registry
+凭据不进入进程参数。进程内验证器支持 ECDSA、RSA 与 Ed25519 公钥，并将密码学有效性
+与策略信任分开表达。单元与 PostgreSQL 测试覆盖已签名、未签名、无效、不可用、
+未验证、可信、不可信、过期及策略重新评估状态，同时保留历史证据。
+
+M4-04 在 2026-08-09 的证据包括 Repository 授权后的签名契约、严格 Zod 校验、
+TanStack Query 集成及 Artifact 安全面板。前端单元测试、类型检查、Lint、生产 Build
+与 13 条 Playwright 流程均通过；浏览器检查确认键盘刷新、桌面布局和 390 像素移动端
+Viewport 均无水平溢出。
+
+M4-05 在 2026-08-09 的证据包括真实生产拓扑 Runner。它证明 Worker 停止时四个
+持久化 Job 保持 Queued、Registry 故障期间发生一次可恢复重试、漏洞与干净 Scan/SBOM
+完成，并区分可信、不可信、无效、Attested 与未签名状态；两个不可变策略版本触发
+重新评估，经授权 API 返回第二版策略结果，同时记录 Trivy/Cosign 版本。
+
+M4-02 与 M4-03 按 Repository 加不可变 Artifact Digest 保存结果。Scan Record 包含
+扫描器和漏洞数据库版本；Signature Record 保留签名标识、签名者证据、密码学有效性、
+策略信任、策略版本、验证时间和机器可读原因。缺失或不可用证据绝不能变成成功的零值。
+
+M4-04 只在对应持久化语义通过测试后添加公共契约。读取安全存储前复用 Repository
+Discovery 授权；Web 通过 TanStack Query 使用 Zod 校验后的响应，不重新实现策略决策。
+按 D-007，M4 全部安全工作保持异步且只展示信息。Pull Enforcement 仍是后续需要
+单独批准的变更。
 
 退出证据包括：已签名测试镜像、未签名镜像、无效签名、有效但不受信任的签名、有效
 且受信任的签名、存在漏洞的镜像、任务失败/重试，以及信任策略重新评估。
@@ -431,12 +504,8 @@ Push-to-Web Runner 与完整仓库门禁构成验收证据。[威胁模型](secu
 
 ## 11. 立即执行队列
 
-根据当前仓库状态，推荐按以下顺序执行：
-
-1. **关闭 M3-07 所需的 G-04 子集：**实现演练前先批准受支持 MVP 部署及 Backup/Restore
-   范围。
-2. **决策后实现 M3-07 与 M3-08：**证明 Migration 和 Backup/Restore，再汇总双语 Operator、
-   API、用户及 Release Limitation 文档。
+里程碑 4 已完成。开始实现前，应先选择并批准一项独立范围的里程碑 5 能力。D-007
+继续要求 Scan 与 Trust 结果只展示信息；Pull Enforcement 需要另行完成产品决策。
 
 Commit 应保持足够小，使一个工作包及其测试可一起审查。
 

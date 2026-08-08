@@ -1,5 +1,6 @@
 import type { z } from "zod";
 import {
+  artifactSecuritySchema,
   artifactListSchema,
   artifactDetailSchema,
   errorEnvelopeSchema,
@@ -15,6 +16,7 @@ import {
   tagSchema,
   userSchema,
   type Artifact,
+  type ArtifactSecurity,
   type ArtifactList,
   type FieldError,
   type HealthResponse,
@@ -191,6 +193,17 @@ export async function getArtifact(namespace: string, repository: string, digest:
   );
 }
 
+export async function getArtifactSecurity(
+  namespace: string,
+  repository: string,
+  digest: string,
+): Promise<ArtifactSecurity> {
+  return request(
+    `/api/v1/namespaces/${encodeURIComponent(namespace)}/repositories/${encodeURIComponent(repository)}/artifacts/${encodeURIComponent(digest)}/security`,
+    artifactSecuritySchema,
+  );
+}
+
 export async function listTags(namespace: string, repository: string, input?: PageInput): Promise<TagList> {
   return request(
     `/api/v1/namespaces/${encodeURIComponent(namespace)}/repositories/${encodeURIComponent(repository)}/tags${pageQuery(input)}`,
@@ -231,6 +244,9 @@ export async function updateRepository(
 
 export type {
   Artifact,
+  ArtifactSecurity,
+  SecurityResult,
+  SignatureEvidence,
   ArtifactList,
   LoginResponse,
   ManifestDescriptor,

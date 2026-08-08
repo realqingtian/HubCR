@@ -108,27 +108,92 @@ func (s *Service) Issue(ctx context.Context, request IssueRequest) (IssueResult,
 		})
 	}
 
-	now := s.clock().UTC().Truncate(time.Second)
-	tokenID := make([]byte, jtiBytes)
-	if _, err := io.ReadFull(s.random, tokenID); err != nil {
-		return IssueResult{}, fmt.Errorf("%w: generate token ID", ErrUnavailable)
-	}
-	claims := Claims{
-		Issuer: s.issuer, Subject: subject.ID, Audience: s.service,
-		ExpiresAt: now.Add(s.tokenTTL).Unix(),
-		NotBefore: now.Add(-s.clockSkew).Unix(),
-		IssuedAt:  now.Unix(),
-		ID:        base64.RawURLEncoding.EncodeToString(tokenID),
-		Access:    access,
-	}
-	token, err := s.signer.Sign(ctx, claims)
+	token, now, err := issueSignedToken(
+		ctx, s.signer, s.issuer, subject.ID, s.service, s.tokenTTL,
+		s.clockSkew, s.clock, s.random, access,
+	)
 	if err != nil {
-		return IssueResult{}, fmt.Errorf("%w: sign token", ErrUnavailable)
+		return IssueResult{}, err
 	}
 	return IssueResult{
 		Token: token, ExpiresIn: int(s.tokenTTL / time.Second), IssuedAt: now,
 		Subject: subject, Access: access, KeyID: s.signer.KeyID(),
 	}, nil
+}
+
+type SystemTokenOptions struct {
+	Service   string
+	Issuer    string
+	Subject   string
+	TokenTTL  time.Duration
+	ClockSkew time.Duration
+	Clock     func() time.Time
+	Random    io.Reader
+}
+
+// SystemTokenService issues a pull-only token for a repository that a trusted
+// internal workflow has already resolved from durable state. It deliberately has
+// no public HTTP adapter and cannot mint push or delete access.
+type SystemTokenService struct {
+	signer  TokenSigner
+	options SystemTokenOptions
+}
+
+func NewSystemTokenService(
+	signer TokenSigner,
+	options SystemTokenOptions,
+) (*SystemTokenService, error) {
+	if signer == nil || signer.KeyID() == "" || options.Service == "" ||
+		options.Issuer == "" || options.Subject == "" || options.Clock == nil ||
+		options.Random == nil || options.TokenTTL < time.Minute ||
+		options.TokenTTL > 15*time.Minute || options.TokenTTL%time.Second != 0 ||
+		options.ClockSkew < 0 || options.ClockSkew > time.Minute {
+		return nil, errors.New("Registry system token dependencies and options must be configured")
+	}
+	if len(options.Subject) > 128 {
+		return nil, errors.New("Registry system token subject is invalid")
+	}
+	return &SystemTokenService{signer: signer, options: options}, nil
+}
+
+func (s *SystemTokenService) IssuePull(ctx context.Context, repositoryPath string) (string, error) {
+	scopes, err := ParseScopes([]string{"repository:" + repositoryPath + ":pull"})
+	if err != nil || len(scopes) != 1 || scopes[0].Name != repositoryPath ||
+		len(scopes[0].Actions) != 1 || scopes[0].Actions[0] != ActionPull {
+		return "", ErrInvalidRequest
+	}
+	access := []Access{{Type: ResourceRepository, Name: repositoryPath, Actions: []Action{ActionPull}}}
+	token, _, err := issueSignedToken(
+		ctx, s.signer, s.options.Issuer, s.options.Subject, s.options.Service,
+		s.options.TokenTTL, s.options.ClockSkew, s.options.Clock, s.options.Random, access,
+	)
+	return token, err
+}
+
+func issueSignedToken(
+	ctx context.Context,
+	signer TokenSigner,
+	issuer, subject, service string,
+	tokenTTL, clockSkew time.Duration,
+	clock func() time.Time,
+	random io.Reader,
+	access []Access,
+) (string, time.Time, error) {
+	now := clock().UTC().Truncate(time.Second)
+	tokenID := make([]byte, jtiBytes)
+	if _, err := io.ReadFull(random, tokenID); err != nil {
+		return "", time.Time{}, fmt.Errorf("%w: generate token ID", ErrUnavailable)
+	}
+	claims := Claims{
+		Issuer: issuer, Subject: subject, Audience: service,
+		ExpiresAt: now.Add(tokenTTL).Unix(), NotBefore: now.Add(-clockSkew).Unix(),
+		IssuedAt: now.Unix(), ID: base64.RawURLEncoding.EncodeToString(tokenID), Access: access,
+	}
+	token, err := signer.Sign(ctx, claims)
+	if err != nil {
+		return "", time.Time{}, fmt.Errorf("%w: sign token", ErrUnavailable)
+	}
+	return token, now, nil
 }
 
 func (s *Service) authenticate(
