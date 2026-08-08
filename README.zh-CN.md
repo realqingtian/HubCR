@@ -14,8 +14,8 @@ HubCR 是面向个人开发者与组织的容器镜像中心。它围绕 OCI Reg
 > 保护的本地 Distribution Gateway。以 Digest 为键的 Artifact、Manifest/Index 和当前
 > Tag 持久化已接入经过认证的 Distribution Push Event，并通过受 Policy 保护的读取 API
 > 暴露。本地运维已具备 Registry Challenge、Token 决策、通知和协调遥测。账号
-> Bootstrap/邀请兑换、Web Artifact 工作流和软件供应链安全能力尚未实现。当前版本不能
-> 作为生产环境镜像仓库使用。
+> Bootstrap/邀请兑换和软件供应链安全能力尚未实现。当前版本不能作为生产环境镜像
+> 仓库使用。
 
 ## HubCR 的用途
 
@@ -52,12 +52,12 @@ docker push hubcr.io/my-organization/backend:v1.0.0
 | --- | --- |
 | Go 控制面 | 已有可运行服务、PostgreSQL 生命周期、依赖感知健康检查、本地 Session、组织、Repository、Artifact/Tag 读取 API 和集中授权 |
 | 异步 Worker | 已有可运行的轮询骨架，尚未连接任务持久化 |
-| Web 应用 | 已有登录态 Next.js Shell、Overview、Namespace 与 Repository Detail 路由，以及经过运行时校验的类型化认证、组织/成员和 Repository 管理流程；Artifact/Tag Web 发现仍待实现 |
+| Web 应用 | 已有登录态 Next.js Shell、Overview、Namespace、Repository、Policy 支持的 Registry Quick-start、Artifact/Tag 列表与不可变 Digest 详情路由，以及经过运行时校验的类型化管理流程 |
 | OCI 数据面 | 本地 Gateway 将 `/v2/` 路由到 MinIO 支持且受 Token 保护的 CNCF Distribution，并将 `/token` 路由到 Go 控制面 |
 | PostgreSQL 与 Redis | 已定义本地 Compose 服务；控制面已连接 PostgreSQL，Redis 尚未接入 |
 | 用户、组织与仓库 | 已有身份/Session API、个人 Namespace、组织/成员 API、集中能力 Policy、受 Policy 保护的 Repository API 及对应最小 Web 工作区；账号 Bootstrap/邀请兑换仍待实现 |
 | Registry Token 服务 | 已实现功能开关控制的 RS256 Token 签发、精确 Repository/Action Scope、JWKS 信任及支持轮换的验证 |
-| Artifact 元数据 | 已通过经过认证的 Distribution Push 事件与 GORM 协调 Repository 级不可变 Digest、Manifest/Index Descriptor 和可变当前 Tag，并提供经过授权的列表/详情 API |
+| Artifact 元数据 | 已通过经过认证的 Distribution Push 事件与 GORM 协调 Repository 级不可变 Digest、Manifest/Index Descriptor 和可变当前 Tag，并提供经过授权的 API 与 Web 列表/详情视图 |
 | Registry 可观测性 | 已有不泄露 Secret 的 Challenge/Token/通知结构化日志、有界控制面 Counter 及仅监听 localhost 的 Distribution 指标/队列可见性 |
 | Trivy 与 Cosign | 已预留 Worker 边界，集成尚未实现 |
 
@@ -231,7 +231,7 @@ make infra-down
 | `make dev-worker` | 运行异步 Worker |
 | `make dev-web` | 运行 Next.js 开发服务器 |
 | `make db-migrate` | 应用仅向前的 PostgreSQL 迁移 |
-| `make registry-dev-keys` | 生成或验证被忽略的本地 Registry RSA/JWKS 材料 |
+| `make registry-dev-keys` | 生成或验证被忽略的本地 Registry RSA/JWKS 与事件 Token 材料 |
 | `make infra-config` | 验证本地 Compose 配置 |
 | `make infra-up` | 启动本地基础设施且不改变命名卷 |
 | `make infra-down` | 停止本地基础设施且不删除命名卷 |
@@ -241,8 +241,11 @@ make infra-down
 | `make test-integration` | 提供隔离 PostgreSQL 并运行后端集成测试 |
 | `make test-m1-e2e` | 通过真实 PostgreSQL、Go API、Next.js 与 Chromium 运行 M1 流程 1–3 |
 | `make test-m2-registry-e2e` | 运行隔离的真实 Docker Push/Pull 与 Registry 授权检查 |
+| `make test-m3-artifact-e2e` | 在 Chromium 中运行真实 Distribution Push-to-Web Artifact 发现旅程 |
 | `make check-docs` | 验证双语 Markdown 配对、链接、空白与文件末尾换行 |
 | `make check-secrets` | 扫描已跟踪文本中的高置信度凭据模式 |
+| `make check-security-config` | 强制 Loopback 端口、生成式事件 Secret 与 Route 级 Proxy Timeout |
+| `make check-workflows` | 拒绝可变的第三方 GitHub Action 引用 |
 | `make check` | 运行格式检查、Vet、测试、类型检查、Lint 和生产构建 |
 
 请求代码审查或提交完整改动之前必须运行 `make check`。
@@ -251,7 +254,7 @@ make infra-down
 
 | 变量 | 默认值 | 作用 |
 | --- | --- | --- |
-| `HUBCR_API_ADDRESS` | `:8080` | 控制面监听地址 |
+| `HUBCR_API_ADDRESS` | `127.0.0.1:8080` | 默认仅监听 Loopback 的控制面地址 |
 | `HUBCR_SHUTDOWN_TIMEOUT` | `10s` | HTTP 优雅退出超时 |
 | `HUBCR_DATABASE_URL` | 本地开发 PostgreSQL URL | 控制面 PostgreSQL 连接 URL |
 | `HUBCR_DATABASE_CONNECT_TIMEOUT` | `5s` | 建立 PostgreSQL 连接的超时时间 |
@@ -267,6 +270,7 @@ make infra-down
 | `HUBCR_REGISTRY_TOKEN_TTL` | `5m` | Registry 短期 Token TTL；允许范围为 `1m`–`15m` |
 | `HUBCR_REGISTRY_TOKEN_PRIVATE_KEY_FILE` | 无 | 活动 RSA 私钥的只读绝对路径 |
 | `HUBCR_REGISTRY_TOKEN_JWKS_FILE` | 无 | 包含活动公钥与可选退出公钥的可信公开 JWKS 绝对路径 |
+| `HUBCR_REGISTRY_EVENT_TOKEN` | 生成的本地 Secret | Distribution 事件共享 Secret；Make 工作流会在被忽略的 `.data/` 下生成 |
 | `HUBCR_WORKER_POLL_INTERVAL` | `5s` | Worker 轮询间隔 |
 | `HUBCR_CONTROL_PLANE_URL` | `http://127.0.0.1:8080` | Next.js 同源 `/api` Rewrite 的服务端目标 |
 | `NEXT_PUBLIC_API_BASE_URL` | 同源 | 面向已启用 CORS 端点的可选浏览器公开覆盖项 |
@@ -292,7 +296,8 @@ make infra-down
 - 发现签名不等于签名可信；可信状态必须来自针对版本化策略的成功验证。
 - 扫描和验签必须异步执行，除非仓库明确启用阻断策略，否则不能阻塞成功的镜像
   Push。
-- 禁止提交密钥和真实凭据；仓库只能包含明确标注的本地开发默认值。
+- 禁止提交密钥和真实凭据。Registry 签名与事件 Secret 会生成到被忽略的本地存储；
+  可预测的数据库与对象存储值只作为 Loopback 开发默认值使用。
 
 ## 文档
 
@@ -311,6 +316,7 @@ make infra-down
 | Artifact 元数据持久化 | [Artifact persistence](docs/artifact-metadata-persistence.md) | [Artifact 持久化](docs/artifact-metadata-persistence.zh-CN.md) |
 | Distribution 事件协调 | [Event reconciliation](docs/distribution-event-reconciliation.md) | [事件协调](docs/distribution-event-reconciliation.zh-CN.md) |
 | Registry 运维可观测性 | [Registry observability](docs/registry-observability.md) | [Registry 可观测性](docs/registry-observability.zh-CN.md) |
+| Registry MVP 威胁模型 | [Threat model](docs/security-threat-model.md) | [威胁模型](docs/security-threat-model.zh-CN.md) |
 | AI 指令层级 | [Instructions](AGENTS.md) | [AI 指令](AGENTS.zh-CN.md) |
 | 本地基础设施 | [Compose](deployments/compose/README.md) | [本地基础设施](deployments/compose/README.zh-CN.md) |
 | Web 应用 | [Web](frontend/README.md) | [Web 应用](frontend/README.zh-CN.md) |

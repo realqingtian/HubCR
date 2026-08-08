@@ -40,8 +40,9 @@ Distribution 与 API 共享 `HUBCR_REGISTRY_EVENT_TOKEN`。启用 Registry 认�
 `Authorization: Bearer <token>` Header 发送。Handler 对已配置 Secret 的 SHA-256
 Digest 进行常量时间比较，且永不记录 Secret、Authorization Header 或通知 Payload。
 
-仓库中提供的 Token 明确只用于本地开发。部署时必须为 API 与 Distribution Endpoint
-配置同一个独立 Secret。
+仓库不会提交任何可被接受的 Token。`make registry-dev-keys` 会生成权限为 `0600` 的
+被忽略本地 Token，Make 工作流再把它注入 API 与 Distribution。共享部署必须提供并
+轮换自己的独立 Secret。
 
 Handler 每次最多接收 1 MiB 和 100 个事件。错误 JSON、尾随 JSON 值、缺失或重复认证
 Header、不支持的方法和错误 Media Type 都会被拒绝。为了协议向前兼容，未知 JSON

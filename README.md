@@ -18,8 +18,8 @@ reimplemented.
 > persistence is connected to authenticated Distribution push events and exposed
 > through policy-protected read APIs. Registry challenge, token-decision, notification,
 > and reconciliation telemetry is available for local operations. Account
-> bootstrap/invitation redemption, web artifact workflows, and supply-chain security
-> features are not implemented yet. Do not use the current version as a production
+> bootstrap/invitation redemption and supply-chain security features are not
+> implemented yet. Do not use the current version as a production
 > registry.
 
 ## What HubCR is for
@@ -57,12 +57,12 @@ docker push hubcr.io/my-organization/backend:v1.0.0
 | --- | --- |
 | Go control plane | Runnable service with PostgreSQL lifecycle, dependency-aware health, local sessions, organizations, repositories, Artifact/Tag read APIs, and centralized authorization |
 | Asynchronous worker | Runnable polling scaffold; job persistence is not connected |
-| Web application | Authenticated Next.js shell with overview, namespace and repository-detail routes plus typed, runtime-validated auth, organization/member and repository-management flows; Artifact/Tag web discovery remains pending |
+| Web application | Authenticated Next.js shell with overview, namespace, repository, policy-backed Registry quick-start, Artifact/Tag lists, and immutable Digest detail routes plus typed, runtime-validated management flows |
 | OCI data plane | Local gateway routes `/v2/` to token-protected CNCF Distribution backed by MinIO and `/token` to the Go control plane |
 | PostgreSQL and Redis | Local Compose services defined; the control plane connects to PostgreSQL, while Redis is not connected |
 | Users, organizations, and repositories | Identity/session APIs, personal namespaces, organization/member APIs, centralized capability policy, policy-protected repository APIs, and the corresponding minimal web workspace exist; account bootstrap/invitation redemption remains pending |
 | Registry token service | Feature-gated RS256 token issuance with exact repository/action scopes, JWKS trust and rotation-ready verification |
-| Artifact metadata | Authenticated Distribution push events reconcile repository-scoped immutable digests, manifest/index descriptors, and mutable current tags through GORM; authorized list/detail APIs are available |
+| Artifact metadata | Authenticated Distribution push events reconcile repository-scoped immutable digests, manifest/index descriptors, and mutable current tags through GORM; authorized API and Web list/detail views are available |
 | Registry observability | Secret-safe structured challenge/token/notification logs, bounded control-plane counters, and localhost-only Distribution metrics/queue visibility |
 | Trivy and Cosign | Worker boundaries reserved; integrations are pending |
 
@@ -242,7 +242,7 @@ make infra-down
 | `make dev-worker` | Run the asynchronous worker |
 | `make dev-web` | Run the Next.js development server |
 | `make db-migrate` | Apply forward-only PostgreSQL migrations |
-| `make registry-dev-keys` | Generate or validate ignored local Registry RSA/JWKS material |
+| `make registry-dev-keys` | Generate or validate ignored local Registry RSA/JWKS and event-token material |
 | `make infra-config` | Validate the local Compose configuration |
 | `make infra-up` | Start local infrastructure without changing named volumes |
 | `make infra-down` | Stop local infrastructure without deleting named volumes |
@@ -252,8 +252,11 @@ make infra-down
 | `make test-integration` | Provision isolated PostgreSQL and run backend integration tests |
 | `make test-m1-e2e` | Run M1 journeys 1–3 through real PostgreSQL, Go API, Next.js, and Chromium |
 | `make test-m2-registry-e2e` | Run isolated real Docker push/pull and Registry authorization checks |
+| `make test-m3-artifact-e2e` | Run the real Distribution push-to-Web Artifact discovery journey in Chromium |
 | `make check-docs` | Validate bilingual Markdown pairs, links, whitespace, and final newlines |
 | `make check-secrets` | Scan tracked text for high-confidence credential patterns |
+| `make check-security-config` | Enforce loopback ports, generated event secrets, and route-scoped proxy timeouts |
+| `make check-workflows` | Reject mutable third-party GitHub Action references |
 | `make check` | Run formatting checks, vet, tests, type checking, lint, and production build |
 
 Run `make check` before requesting review or committing a completed change.
@@ -262,7 +265,7 @@ Run `make check` before requesting review or committing a completed change.
 
 | Variable | Default | Purpose |
 | --- | --- | --- |
-| `HUBCR_API_ADDRESS` | `:8080` | Control-plane listen address |
+| `HUBCR_API_ADDRESS` | `127.0.0.1:8080` | Loopback-only default control-plane listen address |
 | `HUBCR_SHUTDOWN_TIMEOUT` | `10s` | Graceful HTTP shutdown timeout |
 | `HUBCR_DATABASE_URL` | local development PostgreSQL URL | Control-plane PostgreSQL connection URL |
 | `HUBCR_DATABASE_CONNECT_TIMEOUT` | `5s` | Timeout for establishing a PostgreSQL connection |
@@ -278,6 +281,7 @@ Run `make check` before requesting review or committing a completed change.
 | `HUBCR_REGISTRY_TOKEN_TTL` | `5m` | Short-lived Registry Token TTL; accepted range is `1m`–`15m` |
 | `HUBCR_REGISTRY_TOKEN_PRIVATE_KEY_FILE` | none | Absolute read-only path to the active RSA private key |
 | `HUBCR_REGISTRY_TOKEN_JWKS_FILE` | none | Absolute path to the trusted public JWKS containing the active and optional retiring keys |
+| `HUBCR_REGISTRY_EVENT_TOKEN` | generated local secret | Shared Distribution-event secret; generated under ignored `.data/` for Make workflows |
 | `HUBCR_WORKER_POLL_INTERVAL` | `5s` | Worker polling interval |
 | `HUBCR_CONTROL_PLANE_URL` | `http://127.0.0.1:8080` | Server-side target for the Next.js same-origin `/api` rewrite |
 | `NEXT_PUBLIC_API_BASE_URL` | same origin | Optional browser-visible override for a CORS-enabled endpoint |
@@ -306,8 +310,9 @@ Run `make check` before requesting review or committing a completed change.
   verification against a versioned policy.
 - Scanning and verification are asynchronous and must not block a successful image
   push unless an explicit repository policy requires it.
-- Secrets and real credentials must never be committed. The repository only contains
-  clearly marked local development defaults.
+- Secrets and real credentials must never be committed. Registry signing and event
+  secrets are generated into ignored local storage; predictable database/object-store
+  values remain loopback-only development defaults.
 
 ## Documentation
 
@@ -326,6 +331,7 @@ must link to and remain synchronized with its Simplified Chinese counterpart.
 | Artifact metadata persistence | [Artifact persistence](docs/artifact-metadata-persistence.md) | [Artifact 持久化](docs/artifact-metadata-persistence.zh-CN.md) |
 | Distribution event reconciliation | [Event reconciliation](docs/distribution-event-reconciliation.md) | [事件协调](docs/distribution-event-reconciliation.zh-CN.md) |
 | Registry operational observability | [Registry observability](docs/registry-observability.md) | [Registry 可观测性](docs/registry-observability.zh-CN.md) |
+| Registry MVP threat model | [Threat model](docs/security-threat-model.md) | [威胁模型](docs/security-threat-model.zh-CN.md) |
 | AI instruction hierarchy | [Instructions](AGENTS.md) | [AI 指令](AGENTS.zh-CN.md) |
 | Local infrastructure | [Compose](deployments/compose/README.md) | [本地基础设施](deployments/compose/README.zh-CN.md) |
 | Web application | [Web](frontend/README.md) | [Web 应用](frontend/README.zh-CN.md) |

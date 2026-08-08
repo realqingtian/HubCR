@@ -43,8 +43,9 @@ characters, and is sent as exactly one `Authorization: Bearer <token>` header. T
 handler compares a SHA-256 digest of the configured secret in constant time and never
 logs the secret, authorization header, or notification payload.
 
-The checked-in token is an explicit local-development default only. Deployments must
-provide a separate secret to both the API and Distribution endpoint configuration.
+No accepted token is checked in. `make registry-dev-keys` generates an ignored local
+token with mode `0600`, and the Make workflow injects it into the API and Distribution.
+Shared deployments must provide and rotate their own independent secret.
 
 The handler accepts at most 1 MiB and 100 events per request. It rejects malformed
 JSON, trailing JSON values, missing or duplicate authorization headers, unsupported

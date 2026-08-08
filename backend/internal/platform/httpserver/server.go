@@ -14,12 +14,24 @@ type Server struct {
 	logger          *slog.Logger
 }
 
+const (
+	readHeaderTimeout = 5 * time.Second
+	readTimeout       = 15 * time.Second
+	writeTimeout      = 30 * time.Second
+	idleTimeout       = 60 * time.Second
+	maxHeaderBytes    = 32 * 1024
+)
+
 func New(address string, shutdownTimeout time.Duration, handler http.Handler, logger *slog.Logger) *Server {
 	return &Server{
 		httpServer: &http.Server{
 			Addr:              address,
 			Handler:           handler,
-			ReadHeaderTimeout: 5 * time.Second,
+			ReadHeaderTimeout: readHeaderTimeout,
+			ReadTimeout:       readTimeout,
+			WriteTimeout:      writeTimeout,
+			IdleTimeout:       idleTimeout,
+			MaxHeaderBytes:    maxHeaderBytes,
 		},
 		shutdownTimeout: shutdownTimeout,
 		logger:          logger,

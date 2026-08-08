@@ -29,8 +29,8 @@ func TestLoadAPIDefaults(t *testing.T) {
 	if err != nil {
 		t.Fatalf("LoadAPI() error = %v", err)
 	}
-	if cfg.Address != ":8080" {
-		t.Fatalf("Address = %q, want %q", cfg.Address, ":8080")
+	if cfg.Address != "127.0.0.1:8080" {
+		t.Fatalf("Address = %q, want %q", cfg.Address, "127.0.0.1:8080")
 	}
 	if cfg.ShutdownTimeout != 10*time.Second {
 		t.Fatalf("ShutdownTimeout = %v, want %v", cfg.ShutdownTimeout, 10*time.Second)

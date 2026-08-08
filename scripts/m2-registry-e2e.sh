@@ -10,12 +10,15 @@ minio_console_port=${HUBCR_M2_E2E_MINIO_CONSOLE_PORT:-59001}
 registry_port=${HUBCR_M2_E2E_REGISTRY_PORT:-55001}
 registry_debug_port=${HUBCR_M2_E2E_REGISTRY_DEBUG_PORT:-55002}
 api_port=${HUBCR_M2_E2E_API_PORT:-18081}
+web_port=${HUBCR_M3_E2E_WEB_PORT:-3101}
+run_artifact_web_e2e=${HUBCR_M3_ARTIFACT_WEB_E2E:-false}
 database_url="postgres://hubcr:hubcr-dev-only@127.0.0.1:$postgres_port/hubcr?sslmode=disable"
 registry_origin="http://localhost:$registry_port"
 api_origin="http://127.0.0.1:$api_port"
+web_origin="http://127.0.0.1:$web_port"
 registry_auth_dir=$(pwd)/.data/registry-auth
 test_password=m2-e2e-password
-event_token=hubcr-registry-event-dev-only-000000000000
+event_token=$(openssl rand -hex 32)
 owner_username=m2-e2e-owner
 reader_username=m2-e2e-reader
 outsider_username=m2-e2e-outsider
@@ -26,6 +29,7 @@ reader_image="localhost:$registry_port/m2-e2e-team/private-image:reader-denied"
 log_directory=$(mktemp -d)
 docker_config=$(mktemp -d)
 api_pid=
+web_pid=
 owner_cookie="$log_directory/owner.cookies"
 outsider_cookie="$log_directory/outsider.cookies"
 
@@ -65,6 +69,10 @@ compose() {
 }
 
 cleanup() {
+    if [ -n "$web_pid" ]; then
+        kill "$web_pid" 2>/dev/null || true
+        wait "$web_pid" 2>/dev/null || true
+    fi
     if [ -n "$api_pid" ]; then
         kill "$api_pid" 2>/dev/null || true
         wait "$api_pid" 2>/dev/null || true
@@ -330,4 +338,25 @@ if grep -Fq "$test_password" "$log_directory/api.log" ||
     fail "Registry operational logs leaked credentials or tokens"
 fi
 
+if [ "$run_artifact_web_e2e" = "true" ]; then
+    HUBCR_CONTROL_PLANE_URL="$api_origin" bun run --cwd frontend build
+    HUBCR_CONTROL_PLANE_URL="$api_origin" \
+        bun run --cwd frontend start --hostname 127.0.0.1 --port "$web_port" \
+        >"$log_directory/web.log" 2>&1 &
+    web_pid=$!
+    if ! wait_for_ready "$web_origin" 200; then
+        cat "$log_directory/web.log" >&2
+        fail "M3 Artifact web application did not become ready"
+    fi
+    HUBCR_E2E_WEB_ORIGIN="$web_origin" \
+    HUBCR_M3_E2E_USERNAME="$owner_username" \
+    HUBCR_M3_E2E_PASSWORD="$test_password" \
+        frontend/node_modules/.bin/playwright test \
+            --config frontend/playwright.fullstack.config.ts \
+            m3-artifact-journey.spec.ts
+fi
+
 echo "M2 Registry security matrix, reconciliation, Artifact API, and operational telemetry checks passed"
+if [ "$run_artifact_web_e2e" = "true" ]; then
+    echo "M3 real Push-to-Web Artifact discovery journey passed"
+fi

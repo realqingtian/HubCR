@@ -54,6 +54,17 @@ func New(ctx context.Context, cfg config.API, logger *slog.Logger) (*App, error)
 
 	router := httpapi.NewRouter()
 	health.RegisterRoutes(router, cfg.Database.HealthCheckTimeout, database)
+	loginLimiter, err := auth.NewMemoryLoginLimiter(auth.MemoryLoginLimiterOptions{
+		Window:             auth.DefaultLoginLimitWindow,
+		AttemptsPerAccount: auth.DefaultLoginAttemptsPerAccount,
+		AttemptsPerClient:  auth.DefaultLoginAttemptsPerClient,
+		MaxEntries:         auth.DefaultLoginLimitEntries,
+		Clock:              time.Now,
+	})
+	if err != nil {
+		database.Close()
+		return nil, fmt.Errorf("initialize authentication limiter: %w", err)
+	}
 	authService, err := auth.NewService(
 		authstore.New(database.ORM()),
 		auth.NewPasswordHasher(),
@@ -61,7 +72,7 @@ func New(ctx context.Context, cfg config.API, logger *slog.Logger) (*App, error)
 			SessionTTL: cfg.Authentication.SessionTTL,
 			Random:     rand.Reader,
 			Clock:      time.Now,
-			Limiter:    auth.AllowAllLoginLimiter{},
+			Limiter:    loginLimiter,
 		},
 	)
 	if err != nil {

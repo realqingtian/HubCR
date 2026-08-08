@@ -4,7 +4,7 @@
 
 - 状态：持续维护中的有效计划
 - 计划开始：2026-08-01
-- 当前阶段：M2-01 至 M2-09 及 M3-01 已完成；M2 退出审计仍缺必须旅程 7，下一项为 M3-03
+- 当前阶段：里程碑 0–2 及 M3-01 至 M3-06 已完成；M3-07 被 G-04 的部署与备份子集阻塞
 - 需求基线：[HubCR 产品需求](requirements.zh-CN.md)
 
 本计划将产品基线转化为有顺序、可测试的工作项。它是一份交付管理文档：完成工作后
@@ -41,15 +41,16 @@
 | 仓库 | `main` 跟踪 `origin/main`，已有脚手架与双语文档 | Git 检查 |
 | Go 控制面 | 已有存活/就绪接口、配置、HTTP Server 和优雅退出 | 单元测试及此前运行冒烟测试 |
 | Worker | 已有轮询与优雅退出脚手架 | 代码与仓库检查 |
-| Web | 登录态 Overview、Namespace 与 Repository Detail 路由使用 TanStack Query 和经 Zod 校验的 API 契约 | 单元测试、生产构建、Mock 路由旅程及真实 M1 浏览器回归 |
+| Web | 登录态 Overview、Namespace、Repository、Artifact/Tag 列表与不可变 Digest Detail 路由使用 TanStack Query 和经 Zod 校验的 API 契约 | 单元测试、生产构建、Mock 状态旅程及真实 Push-to-Web 浏览器证据 |
 | Docker 宿主 | Docker Engine `29.6.2`、Compose `v5.3.1`、`linux/arm64` Server | `docker --version`、`docker compose version`、`docker info` |
 | Compose 定义 | PostgreSQL 17、Redis 7、MinIO、Distribution 3 配置可成功解析 | `docker compose ... config --quiet` |
 | Compose 运行 | 完整 Stack 已在 Apple Silicon 通过冒烟测试；macOS 占用 `5000` 时可覆盖 Registry 宿主端口 | [Compose 冒烟证据](../deployments/compose/README.zh-CN.md#已验证环境) |
 | 应用集成 | API 已持有 PostgreSQL 连接池并提供依赖感知就绪检查；Worker 与 Redis 连接仍待实现 | 单元测试、实时依赖中断/恢复及优雅退出检查 |
 | Registry 集成 | Scoped Token 签发、受 Token 保护的本地 Gateway、Push 事件协调、经过授权的 Artifact/Tag 读取 API 及运维遥测已完成 | Go/PostgreSQL 集成测试与 Docker/OCI/API/遥测验收测试 |
 
-项目已完成里程碑 0、里程碑 1 及全部 M2 工作包。M2 退出审计发现必须旅程 7 仍未完成：
-Artifact/Tag 数据已有 API，但尚未进入 Web UI。M3-01 已完成，下一项可执行工作包为 M3-03。
+项目已完成里程碑 0 至 2 及 M3-01 至 M3-06。登录态 Web 体验现已覆盖导航、Policy
+派生的 Quick-start、Artifact 发现、稳定和真实浏览器验收，以及具有源码证据的安全
+整改。命名的 G-04 子集获批前不能启动 M3-07。
 
 ## 3. 决策门
 
@@ -61,7 +62,7 @@ Artifact/Tag 数据已有 API，但尚未进入 Web UI。M3-01 已完成，下�
 | G-01 产品入口 | D-001 产品模式、D-002 注册方式、D-003 首期身份 | 会话结构、登录与注册 UI | 2026-08-01 `CLOSED`；[已获批记录](decisions/README.zh-CN.md#m0-决策会议) |
 | G-02 授权 | D-004 组织角色、D-005 权限继承、D-006 公开 Pull | 成员结构、授权服务、Registry Token | 2026-08-01 `CLOSED`；[已获批记录](decisions/README.zh-CN.md#m0-决策会议) |
 | G-03 安全策略 | D-007 Pull 执行、D-008 签名信任 | 扫描策略与验签契约 | `PLANNED`，里程碑 4 前确认 |
-| G-04 运维 | D-009 生产目标、D-010 运维策略 | 生产部署、删除、保留、GC 与备份 | `PLANNED`，里程碑 5 前确认 |
+| G-04 运维 | D-009 生产目标、D-010 运维策略 | 生产部署、删除、保留、GC 与备份 | 受支持 MVP 部署与备份子集获批前，M3-07 为 `BLOCKED` |
 | G-05 开源 | D-011 许可证 | 第一次公开发布 | `BLOCKED`，公开发布前确认 |
 
 决策记录必须说明背景、选项、被否决方案、后果和日期。G-01 与 G-02 已关闭；后续
@@ -327,10 +328,10 @@ Secret 隔离。运行时套件还修正签名无效检查：改为修改 JWT Si
 - Token Claim 仅包含策略允许的请求操作子集。
 - 重复 Distribution 事件只产生一份正确 Artifact/Tag 状态，且不会丢失合法 Tag 移动。
 
-2026-08-01 的 M2 退出审计通过真实 Docker/OCI 套件和聚焦集成测试证明旅程 4–6、8 及
-其余技术标准。必须旅程 7 尚未完成：已 Push Tag 与不可变 Digest 已通过授权 API 暴露，
-但当前 Web 应用没有 Artifact/Tag View。因此全部 M2 工作包虽已完成，但尚不宣称里程碑
-退出。M3-01 已补齐如实导航缺口；M3-03 仍需补齐 Artifact 发现。
+2026-08-01 完成的 M2 退出审计通过真实 Docker/OCI 套件和聚焦集成测试证明旅程 4–6、8
+及其余技术标准。`make test-m3-artifact-e2e` 复用该隔离 Push 与协调状态，再启动生产版
+Web，并在 Chromium 中证明已 Push 的 `smoke` Tag 与不可变 Digest 可以被发现。因此
+旅程 7 已完成，里程碑 2 已退出。
 
 ## 8. 里程碑 3——Registry MVP 候选版本
 
@@ -340,12 +341,12 @@ Secret 隔离。运行时套件还修正签名无效检查：改为修改 JWT Si
 | ID | 状态 | 交付结果 | 依赖 |
 | --- | --- | --- | --- |
 | M3-01 | `DONE` | Web 导航、认证状态、命名空间与仓库页面 | M1-09、M2-07 |
-| M3-02 | `READY` | 根据真实可见性与用户能力生成仓库快速开始说明 | M2-03、M3-01 |
-| M3-03 | `READY` | Tag/Artifact 列表与 Digest 详情，如实展示不可用与错误状态 | M2-07、M3-01 |
-| M3-04 | `PLANNED` | 登录、组织、仓库与 Artifact 发现的 Playwright 流程 | M3-01–03 |
-| M3-05 | `PLANNED` | 在 CI 或文档化集成环境运行 OCI 验收 | M2-08 |
-| M3-06 | `PLANNED` | 会话、授权和 Token 交换的威胁模型审查与整改 | M1、M2 |
-| M3-07 | `PLANNED` | 受支持 MVP 部署的备份/恢复和迁移演练 | G-04 子集、M2 |
+| M3-02 | `DONE` | 根据真实可见性与用户能力生成仓库快速开始说明 | M2-03、M3-01 |
+| M3-03 | `DONE` | Tag/Artifact 列表与 Digest 详情，如实展示不可用与错误状态 | M2-07、M3-01 |
+| M3-04 | `DONE` | 登录、组织、仓库与 Artifact 发现的 Playwright 流程 | M3-01–03 |
+| M3-05 | `DONE` | 在 CI 或文档化集成环境运行 OCI 验收 | M2-08 |
+| M3-06 | `DONE` | 会话、授权和 Token 交换的威胁模型审查与整改 | M1、M2 |
+| M3-07 | `BLOCKED` | 受支持 MVP 部署的备份/恢复和迁移演练 | G-04 子集、M2 |
 | M3-08 | `PLANNED` | 双语运维、API、用户文档与发布限制 | M3-01–07 |
 
 M3-01 在 2026-08-01 的证据包括共享登录态 Shell，以及用于 Namespace Discovery 和
@@ -355,6 +356,39 @@ Client Response 继续由 Zod 校验并交给 TanStack Query 管理。Breadcrumb
 状态均明确展示。Repository Detail 如实把 Artifact/Tag Discovery 标为不可用，不推断
 Scan、Signature 或 Trust 数据。9 个 Vitest、5 个桌面/390px 宽度 Mock Chromium 旅程、
 Next.js 生产构建及真实 PostgreSQL/Go/Next.js M1 浏览器回归均通过。
+
+M3-03 在 2026-08-01 的证据包括经 Zod 校验的 Artifact/Tag 列表与 Digest Detail Client、
+TanStack Query 状态所有权及严格校验的动态 Digest Route。UI 分开表示可变 Tag 与不可变
+Artifact Identity，区分 Loading、Empty、Access Denial、API Failure、Connection
+Unavailable 和 Success，保留 Index Descriptor 未知与已确认空集合的差别，并对不存在或
+不可见的 Artifact 返回同一个不披露 `404`。Scan、Signature Validity 与 Trust 明确保持
+不可用。14 个 Vitest 与 10 个 Mock Chromium 旅程覆盖契约及 UI 状态；
+`make test-m3-artifact-e2e` 还在一次隔离运行中证明真实 Distribution Push、事件协调、
+登录态 API 读取及 Web 发现。
+
+M3-02 在 2026-08-01 的证据为 Repository Detail 增加调用者专属 `can_pull` 与
+`can_push` 结果。Repository Service 在同一次读取中根据已校验 Namespace Access、显式
+Visibility 和集中 Policy 派生二者；API 不暴露角色，浏览器也不重建 Capability Matrix。
+Quick-start 区分 Web Session 与 Registry Credential，私有 Pull 要求登录，匿名公开 Pull
+省略登录，且仅在 `can_push` 为 true 时展示 Push 命令。Service、Handler 和 PostgreSQL
+集成测试覆盖个人 Owner、组织 Writer/Reader 及公开 Outsider 结果。
+
+M3-04 与 M3-05 在 2026-08-01 的证据包括 12 个稳定 Chromium 旅程，覆盖登录、组织、
+Repository、Quick-start Capability 分支、Artifact 发现、Descriptor Knowledge、拒绝、
+失败、不披露、无效 Route 与移动宽度。`make test-m1-e2e` 保留真实旅程 1–3 证据；已记录
+的 `make test-m3-artifact-e2e` Runner 提供隔离 PostgreSQL/MinIO/Distribution Stack，
+验证真实 Docker 授权、Push 协调、Policy 派生的私有 Quick-start，以及生产版 Web 中的
+Chromium Artifact 发现。
+
+M3-06 在 2026-08-08 的证据包括对 Snapshot 全部 226 个文件的标准全仓安全审查、一个
+Canonical Threat Model，以及六条已验证 Finding（三条 Medium、三条 Low）。整改让 Web
+与 Registry 密码校验共享有界的进程内尝试/并发门；Principal 替换时移除前一账号的
+浏览器 Query 与 Mutation State；把本地 Listener 与 Compose 端口绑定到 Loopback；
+只允许 `/v2/` 使用长 Streaming Proxy；在 Git 外生成事件 Callback Secret；并把 CI Action 固定到不可变
+Commit，同时加入回归检查。聚焦 Go/前端测试、渲染后的 Compose 校验、真实
+Push-to-Web Runner 与完整仓库门禁构成验收证据。[威胁模型](security-threat-model.zh-CN.md)
+记录了限制：多副本认证仍需要共享 Redis 状态，容量仍需按部署做负载测试，且没有暗示
+任何 G-04 生产或备份选择。
 
 只有[需求第 9 节](requirements.zh-CN.md#9-registry-mvp-验收标准)的所有 Registry MVP
 验收项都有证据时，M3 才能退出。UI 中的安全卡片必须不存在或明确标为不可用，绝不能
@@ -399,12 +433,10 @@ Next.js 生产构建及真实 PostgreSQL/Go/Next.js M1 浏览器回归均通过�
 
 根据当前仓库状态，推荐按以下顺序执行：
 
-1. **实现 M3-03：**提供 Tag/Artifact 列表及 Digest 详情，区分 Loading、Empty、Denial、
-   Unavailable 与 Failed 状态，补齐必须旅程 7。
-2. **实现 M3-02：**根据真实 Visibility 与调用方 Capability 生成 Repository Quick-start，
-   不虚构尚不可用的凭据。
-3. **实现 M3-04：**M3-02 与 M3-03 完成后，把 Playwright 从 Repository 导航扩展到真实
-   Artifact Discovery。
+1. **关闭 M3-07 所需的 G-04 子集：**实现演练前先批准受支持 MVP 部署及 Backup/Restore
+   范围。
+2. **决策后实现 M3-07 与 M3-08：**证明 Migration 和 Backup/Restore，再汇总双语 Operator、
+   API、用户及 Release Limitation 文档。
 
 Commit 应保持足够小，使一个工作包及其测试可一起审查。
 

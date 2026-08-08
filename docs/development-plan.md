@@ -4,8 +4,7 @@
 
 - Status: active living plan
 - Plan start: 2026-08-01
-- Current stage: M2-01 through M2-09 and M3-01 are done; the M2 exit audit leaves
-  required journey 7 open, and M3-03 is next
+- Current stage: Milestones 0–2 and M3-01 through M3-06 are done; M3-07 is blocked on the G-04 deployment and backup subset
 - Requirements: [HubCR product requirements](requirements.md)
 
 This plan converts the product baseline into ordered, testable work. It is a delivery
@@ -50,17 +49,17 @@ product decisions, external reviews, or environment downloads.
 | Repository | `main` tracks `origin/main`; scaffold and bilingual documentation exist | Git inspection |
 | Go control plane | Liveness/readiness endpoints, configuration, HTTP server and graceful shutdown exist | Unit tests and prior runtime smoke |
 | Worker | Polling and graceful shutdown scaffold exists | Code and repository checks |
-| Web | Authenticated overview, Namespace and Repository Detail routes use TanStack Query and Zod-validated API contracts | Unit tests, production build, mocked route journeys and real M1 browser regression |
+| Web | Authenticated overview, Namespace, Repository, Artifact/Tag lists, and immutable Digest Detail routes use TanStack Query and Zod-validated API contracts | Unit tests, production build, mocked state journeys and real Push-to-Web browser evidence |
 | Docker host | Docker Engine `29.6.2`, Compose `v5.3.1`, `linux/arm64` server | `docker --version`, `docker compose version`, `docker info` |
 | Compose definition | PostgreSQL 17, Redis 7, MinIO and Distribution 3 configuration parses successfully | `docker compose ... config --quiet` |
 | Compose runtime | Full stack smoke passes on Apple Silicon; the Registry host port can be overridden when macOS reserves `5000` | [Compose smoke evidence](../deployments/compose/README.md#verified-environment) |
 | Application integration | API owns a PostgreSQL pool and dependency-aware readiness; worker and Redis connections remain pending | Unit, live dependency-loss/recovery, and graceful-shutdown checks |
 | Registry integration | Scoped token issuance, the token-protected local gateway, push-event reconciliation, authorized Artifact/Tag read APIs, and operational telemetry are complete | Go/PostgreSQL integration and Docker/OCI/API/telemetry acceptance tests |
 
-The project has completed Milestones 0 and 1 plus every M2 work package. The M2 exit
-audit found required journey 7 still open because Artifact/Tag data is available by
-API but not yet in the web UI. M3-01 is complete and M3-03 is the next executable
-package.
+The project has completed Milestones 0 through 2 and M3-01 through M3-06. The
+authenticated Web experience now covers navigation, policy-derived Quick-start,
+Artifact discovery, deterministic plus real-browser acceptance, and source-backed
+security remediation. M3-07 cannot start until the named G-04 subset is approved.
 
 ## 3. Decision gates
 
@@ -73,7 +72,7 @@ The project owner approves product decisions; implementation work records them u
 | G-01 Product entry | D-001 product mode, D-002 registration, D-003 initial identity | Session schema, login and registration UI | `CLOSED` on 2026-08-01; [accepted records](decisions/README.md#m0-decision-session) |
 | G-02 Authorization | D-004 organization roles, D-005 grant inheritance, D-006 public pull | Membership schema, authorization service, Registry tokens | `CLOSED` on 2026-08-01; [accepted records](decisions/README.md#m0-decision-session) |
 | G-03 Security policy | D-007 pull enforcement, D-008 signature trust | Scan policy and signature-verification contracts | `PLANNED` before Milestone 4 |
-| G-04 Operations | D-009 production target, D-010 operating policy | Production deployment, deletion, retention, GC and backups | `PLANNED` before Milestone 5 |
+| G-04 Operations | D-009 production target, D-010 operating policy | Production deployment, deletion, retention, GC and backups | `BLOCKED` for M3-07 until the supported MVP deployment and backup subset is approved |
 | G-05 Open source | D-011 license | First public release | `BLOCKED` before public release |
 
 Decision records must state context, chosen option, rejected alternatives,
@@ -379,12 +378,12 @@ only unused Base64URL tail bits.
 - Duplicate Distribution events leave one correct artifact/tag state and do not lose
   a legitimate tag move.
 
-The M2 exit audit on 2026-08-01 proves journeys 4–6 and 8 plus the remaining technical
-criteria through the real Docker/OCI suite and focused integration tests. Required
-journey 7 is not complete: the pushed Tag and immutable Digest are exposed through
-authorized APIs, but the current web application has no Artifact/Tag view. Therefore
-the M2 work packages are complete, but milestone exit is not claimed. M3-01 has
-closed the truthful navigation gap; M3-03 must still close Artifact discovery.
+The completed M2 exit audit on 2026-08-01 proves journeys 4–6 and 8 plus the remaining
+technical criteria through the real Docker/OCI suite and focused integration tests.
+`make test-m3-artifact-e2e` reuses that isolated push and reconciliation state, then
+starts the production Web application and proves in Chromium that the pushed `smoke`
+Tag and immutable Digest are discoverable. Journey 7 is therefore complete and
+Milestone 2 has exited.
 
 ## 8. Milestone 3 — Registry MVP release candidate
 
@@ -394,12 +393,12 @@ evidence without claiming supply-chain security features.
 | ID | State | Result | Dependencies |
 | --- | --- | --- | --- |
 | M3-01 | `DONE` | Web navigation, authentication state, namespace and repository pages | M1-09, M2-07 |
-| M3-02 | `READY` | Repository quick-start instructions derived from actual visibility and user capability | M2-03, M3-01 |
-| M3-03 | `READY` | Tag/artifact list and digest detail with truthful unavailable/error states | M2-07, M3-01 |
-| M3-04 | `PLANNED` | Playwright journeys for login, organization, repository and artifact discovery | M3-01–03 |
-| M3-05 | `PLANNED` | OCI acceptance runner in CI or a documented integration environment | M2-08 |
-| M3-06 | `PLANNED` | Threat-model review and remediation for sessions, authorization and token exchange | M1, M2 |
-| M3-07 | `PLANNED` | Backup/restore and migration rehearsal for the supported MVP deployment | G-04 subset, M2 |
+| M3-02 | `DONE` | Repository quick-start instructions derived from actual visibility and user capability | M2-03, M3-01 |
+| M3-03 | `DONE` | Tag/artifact list and digest detail with truthful unavailable/error states | M2-07, M3-01 |
+| M3-04 | `DONE` | Playwright journeys for login, organization, repository and artifact discovery | M3-01–03 |
+| M3-05 | `DONE` | OCI acceptance runner in CI or a documented integration environment | M2-08 |
+| M3-06 | `DONE` | Threat-model review and remediation for sessions, authorization and token exchange | M1, M2 |
+| M3-07 | `BLOCKED` | Backup/restore and migration rehearsal for the supported MVP deployment | G-04 subset, M2 |
 | M3-08 | `PLANNED` | Bilingual operator, API and user documentation plus release limitations | M3-01–07 |
 
 M3-01 evidence on 2026-08-01 includes a shared authenticated Shell and typed dynamic
@@ -411,6 +410,49 @@ explicit. Repository Detail truthfully marks Artifact/Tag discovery as unavailab
 instead of inferring scan, signature, or trust data. Nine Vitest tests, five mocked
 Chromium journeys at desktop and 390-pixel widths, the Next.js production build, and
 the real PostgreSQL/Go/Next.js M1 browser regression pass.
+
+M3-03 evidence on 2026-08-01 includes Zod-validated Artifact/Tag list and Digest
+detail clients, TanStack Query ownership, and a strictly validated dynamic Digest
+route. The UI keeps mutable Tags separate from immutable Artifact identity,
+distinguishes loading, empty, access denial, API failure, connection unavailability,
+and success, preserves unknown versus confirmed-empty Index descriptor knowledge,
+and returns the same non-disclosing Artifact `404` message for missing or hidden
+records. Scan, signature validity, and trust remain explicitly unavailable. Fourteen
+Vitest checks and ten mocked Chromium journeys cover contract and UI states;
+`make test-m3-artifact-e2e` additionally proves a real Distribution push, event
+reconciliation, authenticated API read, and Web discovery in one isolated run.
+
+M3-02 evidence on 2026-08-01 adds caller-specific `can_pull` and `can_push` results to
+Repository Detail. The Repository service derives both from validated namespace
+access, explicit Visibility, and the centralized policy in the same read operation;
+the API does not expose roles and the browser does not recreate the capability
+matrix. Quick-start treats Web sessions and Registry credentials as separate,
+requires login for private Pull, omits login for anonymous public Pull, and withholds
+Push commands unless `can_push` is true. Service, handler, and PostgreSQL integration
+tests cover personal owner, organization Writer/Reader, and public outsider results.
+
+M3-04 and M3-05 evidence on 2026-08-01 includes twelve deterministic Chromium
+journeys for login, organization, repository, Quick-start capability branches,
+Artifact discovery, descriptor knowledge, denial, failure, non-disclosure, invalid
+routes, and mobile width. `make test-m1-e2e` retains the real journeys 1–3 evidence;
+the documented `make test-m3-artifact-e2e` runner provisions an isolated
+PostgreSQL/MinIO/Distribution stack and validates real Docker authorization, Push
+reconciliation, policy-derived private Quick-start, and Artifact discovery through
+the production Web application in Chromium.
+
+M3-06 evidence on 2026-08-08 includes a standard repository-wide security review of
+all 226 snapshot files, one canonical threat model, and six validated findings (three
+medium and three low). Remediation makes Web and Registry password verification share
+a bounded process-local attempt/concurrency gate, removes prior-principal browser
+query and mutation state on replacement, binds local listeners and Compose ports to
+loopback, scopes long proxy streaming to `/v2/`, generates the event callback secret
+outside Git, and
+pins CI actions to immutable commits with a regression check. Focused Go and frontend
+tests, rendered Compose validation, the real Push-to-Web runner, and the full
+repository gate provide the acceptance evidence. The
+[threat model](security-threat-model.md) records limits: multi-replica authentication
+still needs shared Redis state, capacity needs deployment load testing, and no G-04
+production or backup choice is implied.
 
 M3 exits only when every Registry MVP acceptance criterion in
 [requirements section 9](requirements.md#9-registry-mvp-acceptance-criteria) has
@@ -463,12 +505,11 @@ operator workflow, and failure-recovery test. This milestone is not a single rel
 
 This is the recommended order from the current repository state:
 
-1. **Implement M3-03:** expose Tag/Artifact lists and Digest detail with distinct
-   loading, empty, denial, unavailable, and failed states, closing required journey 7.
-2. **Implement M3-02:** derive repository quick-start instructions from actual
-   visibility and caller capability without inventing unavailable credentials.
-3. **Implement M3-04:** extend Playwright from repository navigation through real
-   Artifact discovery after M3-02 and M3-03 are complete.
+1. **Close the G-04 subset required by M3-07:** approve the supported MVP deployment
+   and backup/restore scope before implementing a rehearsal.
+2. **Implement M3-07 and M3-08 after that decision:** prove migration plus
+   backup/restore, then consolidate bilingual operator, API, user, and release-limit
+   documentation.
 
 Keep commits small enough that one work package and its tests can be reviewed together.
 

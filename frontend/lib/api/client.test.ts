@@ -1,5 +1,13 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { getCurrentUser, getRepository, login, updateRepository } from "./client";
+import {
+  getArtifact,
+  getCurrentUser,
+  getRepository,
+  listArtifacts,
+  listTags,
+  login,
+  updateRepository,
+} from "./client";
 
 const user = {
   id: "11111111-1111-4111-8111-111111111111",
@@ -18,6 +26,17 @@ const repository = {
   visibility_updated_by_user_id: user.id,
   visibility_updated_at: "2026-08-01T12:00:00Z",
   created_at: "2026-08-01T12:00:00Z",
+  updated_at: "2026-08-01T12:00:00Z",
+};
+
+const artifactDigest = "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa";
+const artifact = {
+  digest: artifactDigest,
+  kind: "MANIFEST",
+  media_type: "application/vnd.oci.image.manifest.v1+json",
+  size_bytes: 512,
+  descriptors_complete: false,
+  discovered_at: "2026-08-01T12:00:00Z",
   updated_at: "2026-08-01T12:00:00Z",
 };
 
@@ -83,7 +102,10 @@ describe("typed API client", () => {
 
   it("reads and validates repository detail routes", async () => {
     const fetchMock = vi.fn().mockResolvedValue(
-      new Response(JSON.stringify(repository), {
+      new Response(JSON.stringify({
+        ...repository,
+        capabilities: { can_pull: true, can_push: false },
+      }), {
         status: 200,
         headers: { "Content-Type": "application/json" },
       }),
@@ -93,8 +115,60 @@ describe("typed API client", () => {
     const result = await getRepository("platform-team", "backend");
 
     expect(result.name).toBe("backend");
+    expect(result.capabilities).toEqual({ can_pull: true, can_push: false });
     expect(fetchMock).toHaveBeenCalledWith(
       "/api/v1/namespaces/platform-team/repositories/backend",
+      expect.objectContaining({ credentials: "include" }),
+    );
+  });
+
+  it("reads repository-scoped Artifact and Tag discovery routes", async () => {
+    const fetchMock = vi.fn()
+      .mockResolvedValueOnce(new Response(JSON.stringify({ items: [artifact], meta: { limit: 100 } }), {
+        status: 200,
+        headers: { "Content-Type": "application/json" },
+      }))
+      .mockResolvedValueOnce(new Response(JSON.stringify({
+        items: [{
+          name: "latest",
+          digest: artifactDigest,
+          created_at: "2026-08-01T12:00:00Z",
+          updated_at: "2026-08-01T12:00:00Z",
+        }],
+        meta: { limit: 100 },
+      }), {
+        status: 200,
+        headers: { "Content-Type": "application/json" },
+      }))
+      .mockResolvedValueOnce(new Response(JSON.stringify(artifact), {
+        status: 200,
+        headers: { "Content-Type": "application/json" },
+      }));
+    vi.stubGlobal("fetch", fetchMock);
+
+    await expect(listArtifacts("platform.team", "backend_api", { limit: 100 })).resolves.toMatchObject({
+      items: [{ digest: artifactDigest }],
+    });
+    await expect(listTags("platform.team", "backend_api", { limit: 100 })).resolves.toMatchObject({
+      items: [{ name: "latest", digest: artifactDigest }],
+    });
+    await expect(getArtifact("platform.team", "backend_api", artifactDigest)).resolves.toMatchObject({
+      digest: artifactDigest,
+    });
+
+    expect(fetchMock).toHaveBeenNthCalledWith(
+      1,
+      "/api/v1/namespaces/platform.team/repositories/backend_api/artifacts?limit=100",
+      expect.objectContaining({ credentials: "include" }),
+    );
+    expect(fetchMock).toHaveBeenNthCalledWith(
+      2,
+      "/api/v1/namespaces/platform.team/repositories/backend_api/tags?limit=100",
+      expect.objectContaining({ credentials: "include" }),
+    );
+    expect(fetchMock).toHaveBeenNthCalledWith(
+      3,
+      `/api/v1/namespaces/platform.team/repositories/backend_api/artifacts/${encodeURIComponent(artifactDigest)}`,
       expect.objectContaining({ credentials: "include" }),
     );
   });

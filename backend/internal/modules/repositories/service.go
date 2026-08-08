@@ -15,6 +15,7 @@ type Policy interface {
 	AllowsOrganization(organizations.Role, authorization.Capability) bool
 	AllowsPersonalNamespace(bool, authorization.Capability) bool
 	AllowsRepositoryDiscovery(bool, bool) bool
+	AllowsPublicRepositoryPull(bool) bool
 }
 
 type Service struct {
@@ -94,27 +95,56 @@ func (s *Service) Detail(
 	ctx context.Context,
 	actorUserID, namespaceName, repositoryName string,
 ) (Repository, error) {
+	repository, _, err := s.detail(ctx, actorUserID, namespaceName, repositoryName)
+	return repository, err
+}
+
+// DetailWithCapabilities returns one discoverable repository with Registry actions
+// derived from the same validated namespace access and centralized policy decision.
+func (s *Service) DetailWithCapabilities(
+	ctx context.Context,
+	actorUserID, namespaceName, repositoryName string,
+) (RepositoryDetail, error) {
+	repository, access, err := s.detail(ctx, actorUserID, namespaceName, repositoryName)
+	if err != nil {
+		return RepositoryDetail{}, err
+	}
+	isPublic := repository.Visibility == VisibilityPublic
+	canPullPrivate := s.allows(access, authorization.PullPrivateRepositories)
+	return RepositoryDetail{
+		Repository: repository,
+		Capabilities: RepositoryCapabilities{
+			CanPull: s.policy.AllowsPublicRepositoryPull(isPublic) || canPullPrivate,
+			CanPush: s.allows(access, authorization.PushRepositories),
+		},
+	}, nil
+}
+
+func (s *Service) detail(
+	ctx context.Context,
+	actorUserID, namespaceName, repositoryName string,
+) (Repository, NamespaceAccess, error) {
 	access, err := s.access(ctx, namespaceName, actorUserID)
 	if err != nil {
-		return Repository{}, err
+		return Repository{}, NamespaceAccess{}, err
 	}
 	name, err := NormalizeName(repositoryName)
 	if err != nil {
-		return Repository{}, err
+		return Repository{}, NamespaceAccess{}, err
 	}
 	repository, err := s.store.ByNamespaceAndName(ctx, access.NamespaceID, name)
 	if err != nil {
-		return Repository{}, err
+		return Repository{}, NamespaceAccess{}, err
 	}
 	visibility, err := ParseVisibility(string(repository.Visibility))
 	if err != nil || repository.NamespaceID != access.NamespaceID {
-		return Repository{}, ErrInvalidRepository
+		return Repository{}, NamespaceAccess{}, ErrInvalidRepository
 	}
 	canPullPrivate := s.allows(access, authorization.PullPrivateRepositories)
 	if !s.policy.AllowsRepositoryDiscovery(visibility == VisibilityPublic, canPullPrivate) {
-		return Repository{}, ErrNotFound
+		return Repository{}, NamespaceAccess{}, ErrNotFound
 	}
-	return repository, nil
+	return repository, access, nil
 }
 
 // AuthorizationContext resolves validated repository and namespace state without

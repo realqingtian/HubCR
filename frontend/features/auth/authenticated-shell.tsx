@@ -7,6 +7,7 @@ import { createContext, useContext } from "react";
 import { APIError, getCurrentUser, logout, type LoginResponse, type User } from "@/lib/api/client";
 import { friendlyError, PanelMessage } from "@/features/shared/feedback";
 import { LoginPanel } from "./login-panel";
+import { currentUserQueryKey, installAuthenticatedUser } from "./query-cache";
 
 const AuthenticatedUserContext = createContext<User | null>(null);
 
@@ -22,7 +23,7 @@ export function AuthenticatedShell({ children }: Readonly<{ children: React.Reac
   const queryClient = useQueryClient();
   const pathname = usePathname();
   const currentUser = useQuery({
-    queryKey: ["auth", "me"],
+    queryKey: currentUserQueryKey,
     queryFn: ({ signal }) => getCurrentUser(signal),
     retry: false,
   });
@@ -30,12 +31,12 @@ export function AuthenticatedShell({ children }: Readonly<{ children: React.Reac
     mutationFn: logout,
     onSuccess: () => {
       queryClient.clear();
-      void queryClient.invalidateQueries({ queryKey: ["auth", "me"] });
+      void queryClient.invalidateQueries({ queryKey: currentUserQueryKey });
     },
   });
 
   function loggedIn(result: LoginResponse) {
-    queryClient.setQueryData(["auth", "me"], result.user);
+    installAuthenticatedUser(queryClient, result.user);
   }
 
   let content: React.ReactNode;

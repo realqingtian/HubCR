@@ -17,9 +17,10 @@ HUBCR_REGISTRY_PORT=5001 HUBCR_ENV_FILE=.env.example make infra-up
 ```
 
 From the repository root, use the Make workflow. `infra-up` generates or validates an
-ignored local RSA private key and JWKS before mounting only the trust material into
-Distribution. The targets default to `.env`; use `.env.example` only for the
-documented local defaults:
+ignored local RSA private key, JWKS, and random event token before mounting only the
+trust material into Distribution. All published development ports bind to
+`127.0.0.1`. The targets default to `.env`; use `.env.example` only for the documented
+local defaults:
 
 ```bash
 HUBCR_ENV_FILE=.env.example make infra-config
@@ -33,8 +34,9 @@ Start `make dev-api` in a separate terminal before requesting tokens. It enables
 local-only HTTP token endpoint and reuses the same ignored signing material. Direct
 API startup remains fail-closed unless all Registry auth settings are supplied.
 The API and Distribution notification endpoint must also receive the same
-`HUBCR_REGISTRY_EVENT_TOKEN`; the documented Make workflow supplies the explicit
-development-only default from `.env.example`.
+`HUBCR_REGISTRY_EVENT_TOKEN`; the documented Make workflow reads the generated value
+from ignored `.data/registry-auth/event-token`. Shared deployments must inject and
+rotate an independent secret.
 
 When overriding the Registry port, pass the same value to `infra-up`, `dev-api`, and
 `infra-smoke`, for example `HUBCR_REGISTRY_PORT=5001`. Distribution's localhost-only

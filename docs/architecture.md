@@ -38,9 +38,14 @@ Go control plane --> PostgreSQL
 
 The current web route boundary uses a shared authenticated shell around `/`,
 `/namespaces/[namespace]`, and
-`/namespaces/[namespace]/repositories/[repository]`. Route files validate dynamic OCI
-name components and delegate API-backed presentation to the `namespaces` and
-`repositories` features; they do not own authorization decisions.
+`/namespaces/[namespace]/repositories/[repository]`, with immutable Artifact details
+at `/artifacts/[digest]` beneath the repository route. Route files validate dynamic
+OCI name and Digest components and delegate API-backed presentation to the
+`namespaces`, `repositories`, and `artifacts` features; they do not own authorization
+decisions. Artifact clients validate every response with Zod and TanStack Query owns
+loading, error, retry, and successful server state. Repository Detail includes only
+the centralized policy result (`can_pull` and `can_push`), allowing Quick-start to
+select commands without copying the role matrix into the browser.
 
 ## Module rules
 
@@ -58,6 +63,16 @@ name components and delegate API-backed presentation to the `namespaces` and
 8. Registry operational signals follow the same ownership boundary: the gateway and
    Distribution observe `/v2/` challenges and delivery queues; the Go control plane
    observes token decisions and notification reconciliation.
+9. The authentication module owns password-attempt admission. Web login and Registry
+   Basic authentication converge on the same bounded process-local limiter and
+   concurrency gate before Argon2 work; a future multi-replica deployment must replace
+   that state with the approved shared Redis adapter.
+
+The local infrastructure boundary binds the Go listener and every published Compose
+port to `127.0.0.1`. Registry streaming timeouts remain on `/v2/`; token and business
+API routes use bounded buffered proxy behavior. See the
+[Registry MVP threat model](security-threat-model.md) for reviewed attacker paths and
+remaining deployment limitations.
 
 ## Deferred product decisions
 

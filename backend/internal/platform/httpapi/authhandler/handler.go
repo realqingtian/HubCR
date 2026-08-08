@@ -3,7 +3,6 @@ package authhandler
 import (
 	"context"
 	"errors"
-	"net"
 	"net/http"
 	"time"
 
@@ -69,7 +68,7 @@ func (h *Handler) login(w http.ResponseWriter, request *http.Request) error {
 	result, err := h.authenticator.Login(request.Context(), auth.LoginInput{
 		Username:     input.Username,
 		Password:     password,
-		RateLimitKey: clientKey(request),
+		RateLimitKey: httpapi.ClientKey(request),
 	})
 	if err != nil {
 		switch {
@@ -177,12 +176,4 @@ func rejectCrossSite(request *http.Request) *httpapi.Error {
 		return httpapi.InvalidRequest("cross-site authentication request rejected")
 	}
 	return nil
-}
-
-func clientKey(request *http.Request) string {
-	host, _, err := net.SplitHostPort(request.RemoteAddr)
-	if err == nil {
-		return host
-	}
-	return request.RemoteAddr
 }

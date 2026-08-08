@@ -22,7 +22,7 @@ func TestServiceLoginAuthenticateAndLogout(t *testing.T) {
 		SessionTTL: 24 * time.Hour,
 		Random:     bytes.NewReader(bytes.Repeat([]byte{7}, sessionSecretBytes)),
 		Clock:      func() time.Time { return now },
-		Limiter:    AllowAllLoginLimiter{},
+		Limiter:    allowAllLoginLimiter{},
 	})
 	if err != nil {
 		t.Fatalf("NewService() error = %v", err)
@@ -89,7 +89,7 @@ func TestServiceAuthenticationFailuresAreUniform(t *testing.T) {
 				SessionTTL: time.Hour,
 				Random:     bytes.NewReader(bytes.Repeat([]byte{1}, sessionSecretBytes)),
 				Clock:      func() time.Time { return now },
-				Limiter:    AllowAllLoginLimiter{},
+				Limiter:    allowAllLoginLimiter{},
 			})
 			if err != nil {
 				t.Fatalf("NewService() error = %v", err)
@@ -114,18 +114,61 @@ func TestAuthenticatePasswordDoesNotCreateWebSession(t *testing.T) {
 		SessionTTL: time.Hour,
 		Random:     bytes.NewReader(bytes.Repeat([]byte{1}, sessionSecretBytes)),
 		Clock:      func() time.Time { return now },
-		Limiter:    AllowAllLoginLimiter{},
+		Limiter:    allowAllLoginLimiter{},
 	})
 	if err != nil {
 		t.Fatalf("NewService() error = %v", err)
 	}
 
-	user, err := service.AuthenticatePassword(context.Background(), "owner", []byte("correct"))
+	user, err := service.AuthenticatePasswordAttempt(
+		context.Background(),
+		LoginAttempt{Username: "owner", Key: "registry-client"},
+		[]byte("correct"),
+	)
 	if err != nil || user != identity.User {
-		t.Fatalf("AuthenticatePassword() = %#v, %v", user, err)
+		t.Fatalf("AuthenticatePasswordAttempt() = %#v, %v", user, err)
 	}
 	if store.session.ID != "" || store.session.TokenDigest != (SecretDigest{}) {
-		t.Fatalf("AuthenticatePassword() created web session %#v", store.session)
+		t.Fatalf("AuthenticatePasswordAttempt() created web session %#v", store.session)
+	}
+}
+
+func TestAuthenticatePasswordAttemptBoundsConcurrentVerification(t *testing.T) {
+	passwords := &blockingPasswords{
+		started: make(chan struct{}, 1),
+		release: make(chan struct{}),
+	}
+	store := &serviceTestStore{identity: Identity{
+		User:       User{ID: "11111111-1111-4111-8111-111111111111", Username: "owner"},
+		Credential: LocalCredential{PasswordHash: "stored-hash"},
+	}}
+	service, err := NewService(store, passwords, ServiceOptions{
+		SessionTTL:                         time.Hour,
+		Random:                             bytes.NewReader(bytes.Repeat([]byte{1}, sessionSecretBytes)),
+		Clock:                              time.Now,
+		Limiter:                            allowAllLoginLimiter{},
+		MaxConcurrentPasswordVerifications: 1,
+	})
+	if err != nil {
+		t.Fatalf("NewService() error = %v", err)
+	}
+
+	firstResult := make(chan error, 1)
+	go func() {
+		_, err := service.AuthenticatePasswordAttempt(
+			context.Background(), LoginAttempt{Username: "owner", Key: "client-a"}, []byte("password"),
+		)
+		firstResult <- err
+	}()
+	<-passwords.started
+	if _, err := service.AuthenticatePasswordAttempt(
+		context.Background(), LoginAttempt{Username: "other", Key: "client-b"}, []byte("password"),
+	); !errors.Is(err, ErrRateLimited) {
+		t.Fatalf("concurrent AuthenticatePasswordAttempt() error = %v, want ErrRateLimited", err)
+	}
+	close(passwords.release)
+	if err := <-firstResult; !errors.Is(err, ErrUnauthenticated) {
+		t.Fatalf("first AuthenticatePasswordAttempt() error = %v, want ErrUnauthenticated", err)
 	}
 }
 
@@ -141,7 +184,7 @@ func TestServiceRejectsExpiredOrRevokedSession(t *testing.T) {
 			SessionTTL: time.Hour,
 			Random:     bytes.NewReader(bytes.Repeat([]byte{1}, sessionSecretBytes)),
 			Clock:      func() time.Time { return now },
-			Limiter:    AllowAllLoginLimiter{},
+			Limiter:    allowAllLoginLimiter{},
 		})
 		if err != nil {
 			t.Fatalf("NewService() error = %v", err)
@@ -154,9 +197,25 @@ func TestServiceRejectsExpiredOrRevokedSession(t *testing.T) {
 
 type serviceTestPasswords struct{}
 
+type allowAllLoginLimiter struct{}
+
+func (allowAllLoginLimiter) Allow(context.Context, LoginAttempt) error { return nil }
+
 func (serviceTestPasswords) Hash([]byte) (string, error) { return "dummy-hash", nil }
 func (serviceTestPasswords) Verify(password []byte, encoded string) (bool, error) {
 	return string(password) == "correct" && encoded != "", nil
+}
+
+type blockingPasswords struct {
+	started chan struct{}
+	release chan struct{}
+}
+
+func (*blockingPasswords) Hash([]byte) (string, error) { return "dummy-hash", nil }
+func (p *blockingPasswords) Verify([]byte, string) (bool, error) {
+	p.started <- struct{}{}
+	<-p.release
+	return false, nil
 }
 
 type serviceTestStore struct {

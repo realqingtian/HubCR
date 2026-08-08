@@ -10,7 +10,7 @@ import (
 )
 
 type PasswordAuthenticator interface {
-	AuthenticatePassword(context.Context, string, []byte) (auth.User, error)
+	AuthenticatePasswordAttempt(context.Context, auth.LoginAttempt, []byte) (auth.User, error)
 }
 
 type Authenticator struct {
@@ -28,11 +28,19 @@ func (a *Authenticator) Authenticate(
 	ctx context.Context,
 	username string,
 	password []byte,
+	rateLimitKey string,
 ) (registry.Subject, error) {
-	user, err := a.passwords.AuthenticatePassword(ctx, username, password)
+	user, err := a.passwords.AuthenticatePasswordAttempt(
+		ctx,
+		auth.LoginAttempt{Username: username, Key: rateLimitKey},
+		password,
+	)
 	if err != nil {
 		if errors.Is(err, auth.ErrUnauthenticated) {
 			return registry.Subject{}, registry.ErrInvalidCredentials
+		}
+		if errors.Is(err, auth.ErrRateLimited) {
+			return registry.Subject{}, registry.ErrRateLimited
 		}
 		return registry.Subject{}, fmt.Errorf("authenticate Registry credential: %w", err)
 	}

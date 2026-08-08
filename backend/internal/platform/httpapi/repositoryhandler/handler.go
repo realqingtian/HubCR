@@ -24,6 +24,7 @@ type RepositoryService interface {
 	Create(context.Context, string, string, string, repositories.Visibility, string) (repositories.Repository, error)
 	List(context.Context, string, string, repositories.PageRequest) (repositories.RepositoryPage, error)
 	Detail(context.Context, string, string, string) (repositories.Repository, error)
+	DetailWithCapabilities(context.Context, string, string, string) (repositories.RepositoryDetail, error)
 	Update(context.Context, string, string, string, repositories.UpdateRepository) (repositories.Repository, error)
 }
 
@@ -55,16 +56,22 @@ type updateRequest struct {
 }
 
 type repositoryResponse struct {
-	ID                        string `json:"id"`
-	Namespace                 string `json:"namespace"`
-	Name                      string `json:"name"`
-	Visibility                string `json:"visibility"`
-	Description               string `json:"description"`
-	CreatedByUserID           string `json:"created_by_user_id"`
-	VisibilityUpdatedByUserID string `json:"visibility_updated_by_user_id"`
-	VisibilityUpdatedAt       string `json:"visibility_updated_at"`
-	CreatedAt                 string `json:"created_at"`
-	UpdatedAt                 string `json:"updated_at"`
+	ID                        string                          `json:"id"`
+	Namespace                 string                          `json:"namespace"`
+	Name                      string                          `json:"name"`
+	Visibility                string                          `json:"visibility"`
+	Description               string                          `json:"description"`
+	CreatedByUserID           string                          `json:"created_by_user_id"`
+	VisibilityUpdatedByUserID string                          `json:"visibility_updated_by_user_id"`
+	VisibilityUpdatedAt       string                          `json:"visibility_updated_at"`
+	CreatedAt                 string                          `json:"created_at"`
+	UpdatedAt                 string                          `json:"updated_at"`
+	Capabilities              *repositoryCapabilitiesResponse `json:"capabilities,omitempty"`
+}
+
+type repositoryCapabilitiesResponse struct {
+	CanPull bool `json:"can_pull"`
+	CanPush bool `json:"can_push"`
 }
 
 type repositoryListResponse struct {
@@ -134,13 +141,13 @@ func (h *Handler) detail(w http.ResponseWriter, request *http.Request) error {
 	if err != nil {
 		return err
 	}
-	repository, serviceErr := h.repositories.Detail(
+	detail, serviceErr := h.repositories.DetailWithCapabilities(
 		request.Context(), string(user.ID), namespaceName, repositoryName,
 	)
 	if serviceErr != nil {
 		return mapError(serviceErr)
 	}
-	httpapi.WriteJSON(w, http.StatusOK, mapRepository(repository, namespaceName))
+	httpapi.WriteJSON(w, http.StatusOK, mapRepositoryDetail(detail, namespaceName))
 	return nil
 }
 
@@ -285,6 +292,15 @@ func mapRepository(value repositories.Repository, namespaceName string) reposito
 		VisibilityUpdatedAt:       httpapi.FormatTime(value.VisibilityUpdatedAt),
 		CreatedAt:                 httpapi.FormatTime(value.CreatedAt), UpdatedAt: httpapi.FormatTime(value.UpdatedAt),
 	}
+}
+
+func mapRepositoryDetail(value repositories.RepositoryDetail, namespaceName string) repositoryResponse {
+	response := mapRepository(value.Repository, namespaceName)
+	response.Capabilities = &repositoryCapabilitiesResponse{
+		CanPull: value.Capabilities.CanPull,
+		CanPush: value.Capabilities.CanPush,
+	}
+	return response
 }
 
 func mapError(err error) error {

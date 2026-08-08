@@ -32,7 +32,7 @@ notifications:
     - name: hubcr-control-plane
       url: http://host.docker.internal:8080/internal/registry/events
       headers:
-        Authorization: [Bearer hubcr-registry-event-dev-only-000000000000]
+        Authorization: []
       timeout: 2s
       threshold: 5
       backoff: 1s

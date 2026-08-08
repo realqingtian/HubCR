@@ -6,6 +6,7 @@ import (
 	"crypto/rand"
 	"crypto/rsa"
 	"crypto/x509"
+	"encoding/base64"
 	"encoding/json"
 	"encoding/pem"
 	"errors"
@@ -18,8 +19,10 @@ import (
 )
 
 const (
-	privateKeyName = "private.pem"
-	publicJWKSName = "jwks.json"
+	privateKeyName  = "private.pem"
+	publicJWKSName  = "jwks.json"
+	eventTokenName  = "event-token"
+	eventTokenBytes = 32
 )
 
 func main() {
@@ -47,11 +50,20 @@ func ensureDevelopmentKeys(directory string) error {
 	}
 	switch {
 	case privateExists && publicExists:
-		return validateExistingPair(privateKeyPath, publicJWKSPath)
+		if err := validateExistingPair(privateKeyPath, publicJWKSPath); err != nil {
+			return err
+		}
 	case privateExists || publicExists:
 		return errors.New("Registry development signing material is incomplete; remove the local key directory and regenerate it")
+	default:
+		if err := generateDevelopmentKeys(directory, privateKeyPath, publicJWKSPath); err != nil {
+			return err
+		}
 	}
+	return ensureEventToken(directory)
+}
 
+func generateDevelopmentKeys(directory, privateKeyPath, publicJWKSPath string) error {
 	if err := os.MkdirAll(directory, 0o700); err != nil {
 		return fmt.Errorf("create Registry key directory: %w", err)
 	}
@@ -84,6 +96,31 @@ func ensureDevelopmentKeys(directory string) error {
 		return err
 	}
 	return nil
+}
+
+func ensureEventToken(directory string) error {
+	path := filepath.Join(directory, eventTokenName)
+	exists, err := fileExists(path)
+	if err != nil {
+		return err
+	}
+	if exists {
+		contents, err := os.ReadFile(path)
+		if err != nil {
+			return errors.New("read Registry development event token")
+		}
+		if _, err := base64.RawURLEncoding.DecodeString(string(contents)); err != nil || len(contents) < 32 {
+			return errors.New("Registry development event token is invalid; remove the local key directory and regenerate it")
+		}
+		return nil
+	}
+	tokenBytes := make([]byte, eventTokenBytes)
+	if _, err := rand.Read(tokenBytes); err != nil {
+		return fmt.Errorf("generate Registry development event token: %w", err)
+	}
+	token := []byte(base64.RawURLEncoding.EncodeToString(tokenBytes))
+	defer clear(token)
+	return writeExclusive(path, token, 0o600)
 }
 
 func validateExistingPair(privateKeyPath, publicJWKSPath string) error {

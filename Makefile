@@ -1,4 +1,4 @@
-.PHONY: dev-api dev-worker dev-web db-migrate registry-dev-keys infra-config infra-up infra-down infra-status infra-smoke test test-integration test-m1-e2e test-m2-registry-e2e check-docs check-secrets check
+.PHONY: dev-api dev-worker dev-web db-migrate registry-dev-keys infra-config infra-up infra-down infra-status infra-smoke test test-integration test-m1-e2e test-m2-registry-e2e test-m3-artifact-e2e check-docs check-secrets check-security-config check-workflows check
 
 HUBCR_COMPOSE_FILE ?= deployments/compose/compose.yaml
 HUBCR_ENV_FILE ?= .env
@@ -14,8 +14,9 @@ HUBCR_REGISTRY_ISSUER ?= hubcr-token-service
 HUBCR_REGISTRY_TOKEN_TTL ?= 5m
 HUBCR_REGISTRY_TOKEN_PRIVATE_KEY_FILE ?= $(HUBCR_REGISTRY_AUTH_DIR)/private.pem
 HUBCR_REGISTRY_TOKEN_JWKS_FILE ?= $(HUBCR_REGISTRY_AUTH_DIR)/jwks.json
-HUBCR_REGISTRY_EVENT_TOKEN ?= hubcr-registry-event-dev-only-000000000000
-HUBCR_COMPOSE = HUBCR_REGISTRY_AUTH_DIR="$(HUBCR_REGISTRY_AUTH_DIR)" docker compose --env-file $(HUBCR_ENV_FILE) -f $(HUBCR_COMPOSE_FILE)
+HUBCR_REGISTRY_EVENT_TOKEN_FILE ?= $(HUBCR_REGISTRY_AUTH_DIR)/event-token
+HUBCR_RUNTIME_EVENT_TOKEN = $${HUBCR_REGISTRY_EVENT_TOKEN:-$$(tr -d '\n' < "$(HUBCR_REGISTRY_EVENT_TOKEN_FILE)")}
+HUBCR_COMPOSE = HUBCR_REGISTRY_AUTH_DIR="$(HUBCR_REGISTRY_AUTH_DIR)" HUBCR_REGISTRY_EVENT_TOKEN="$(HUBCR_RUNTIME_EVENT_TOKEN)" docker compose --env-file $(HUBCR_ENV_FILE) -f $(HUBCR_COMPOSE_FILE)
 
 dev-api: registry-dev-keys
 	cd backend && \
@@ -27,7 +28,7 @@ dev-api: registry-dev-keys
 		HUBCR_REGISTRY_TOKEN_TTL="$(HUBCR_REGISTRY_TOKEN_TTL)" \
 		HUBCR_REGISTRY_TOKEN_PRIVATE_KEY_FILE="$(HUBCR_REGISTRY_TOKEN_PRIVATE_KEY_FILE)" \
 		HUBCR_REGISTRY_TOKEN_JWKS_FILE="$(HUBCR_REGISTRY_TOKEN_JWKS_FILE)" \
-		HUBCR_REGISTRY_EVENT_TOKEN="$(HUBCR_REGISTRY_EVENT_TOKEN)" \
+		HUBCR_REGISTRY_EVENT_TOKEN="$(HUBCR_RUNTIME_EVENT_TOKEN)" \
 		go run ./cmd/api
 
 dev-worker:
@@ -42,7 +43,7 @@ db-migrate:
 registry-dev-keys:
 	cd backend && go run ./cmd/registry-keygen --output-dir "$(HUBCR_REGISTRY_AUTH_DIR)"
 
-infra-config:
+infra-config: registry-dev-keys
 	$(HUBCR_COMPOSE) config --quiet
 
 infra-up: registry-dev-keys
@@ -77,13 +78,22 @@ test-m1-e2e:
 test-m2-registry-e2e:
 	sh scripts/m2-registry-e2e.sh
 
+test-m3-artifact-e2e:
+	HUBCR_M3_ARTIFACT_WEB_E2E=true sh scripts/m2-registry-e2e.sh
+
 check-docs:
 	python3 scripts/check-docs.py
 
 check-secrets:
 	python3 scripts/check-secrets.py
 
-check: check-docs check-secrets
+check-security-config:
+	python3 scripts/check-security-config.py
+
+check-workflows:
+	python3 scripts/check-workflows.py
+
+check: check-docs check-secrets check-security-config check-workflows
 	cd backend && test -z "$$(gofmt -l .)"
 	cd backend && go vet ./...
 	cd backend && go test ./...

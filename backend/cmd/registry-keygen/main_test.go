@@ -13,6 +13,7 @@ func TestEnsureDevelopmentKeysCreatesAndReusesSecureMatchingPair(t *testing.T) {
 	}
 	privatePath := filepath.Join(directory, privateKeyName)
 	jwksPath := filepath.Join(directory, publicJWKSName)
+	eventTokenPath := filepath.Join(directory, eventTokenName)
 	privateInfo, err := os.Stat(privatePath)
 	if err != nil {
 		t.Fatalf("os.Stat(private) error = %v", err)
@@ -22,6 +23,13 @@ func TestEnsureDevelopmentKeysCreatesAndReusesSecureMatchingPair(t *testing.T) {
 	}
 	if _, err := os.Stat(jwksPath); err != nil {
 		t.Fatalf("os.Stat(JWKS) error = %v", err)
+	}
+	eventTokenInfo, err := os.Stat(eventTokenPath)
+	if err != nil {
+		t.Fatalf("os.Stat(event token) error = %v", err)
+	}
+	if eventTokenInfo.Mode().Perm() != 0o600 {
+		t.Fatalf("event token mode = %o, want 600", eventTokenInfo.Mode().Perm())
 	}
 	before, err := os.ReadFile(privatePath)
 	if err != nil {
@@ -36,6 +44,9 @@ func TestEnsureDevelopmentKeysCreatesAndReusesSecureMatchingPair(t *testing.T) {
 	}
 	if string(before) != string(after) {
 		t.Fatal("ensureDevelopmentKeys replaced an existing private key")
+	}
+	if token, err := os.ReadFile(eventTokenPath); err != nil || len(token) < 32 {
+		t.Fatalf("generated event token = %q, %v", token, err)
 	}
 }
 

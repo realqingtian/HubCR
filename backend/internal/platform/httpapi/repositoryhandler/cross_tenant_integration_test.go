@@ -22,6 +22,7 @@ import (
 	"hubcr.io/hubcr/internal/platform/postgres/authstore"
 	"hubcr.io/hubcr/internal/platform/postgres/organizationstore"
 	"hubcr.io/hubcr/internal/platform/postgres/repositorystore"
+	"hubcr.io/hubcr/internal/testsupport/authlimit"
 	"hubcr.io/hubcr/migrations"
 )
 
@@ -81,7 +82,7 @@ func TestCrossTenantRepositoryIsolationWithPostgres(t *testing.T) {
 		SessionTTL: time.Hour,
 		Random:     bytes.NewReader(bytes.Repeat([]byte{0x6a}, 32)),
 		Clock:      func() time.Time { return now },
-		Limiter:    auth.AllowAllLoginLimiter{},
+		Limiter:    authlimit.AllowAll{},
 	})
 	if err != nil {
 		t.Fatalf("auth.NewService() error = %v", err)

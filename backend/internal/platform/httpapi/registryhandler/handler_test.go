@@ -211,6 +211,12 @@ func TestTokenHandlerProtocolErrors(t *testing.T) {
 			wantStatus: http.StatusUnauthorized, wantCode: "UNAUTHORIZED",
 		},
 		{
+			name: "rate limited credential", method: http.MethodGet,
+			target:     "/token?service=hubcr-registry",
+			issuerErr:  registry.ErrRateLimited,
+			wantStatus: http.StatusTooManyRequests, wantCode: "TOOMANYREQUESTS",
+		},
+		{
 			name: "dependency unavailable", method: http.MethodGet,
 			target:     "/token?service=hubcr-registry",
 			issuerErr:  errors.New("wrapped: " + registry.ErrUnavailable.Error()),
@@ -245,6 +251,9 @@ func TestTokenHandlerProtocolErrors(t *testing.T) {
 			if test.wantStatus == http.StatusMethodNotAllowed &&
 				recorder.Header().Get("Allow") != http.MethodGet {
 				t.Fatalf("Allow = %q", recorder.Header().Get("Allow"))
+			}
+			if test.wantStatus == http.StatusTooManyRequests && recorder.Header().Get("Retry-After") != "60" {
+				t.Fatalf("Retry-After = %q", recorder.Header().Get("Retry-After"))
 			}
 		})
 	}

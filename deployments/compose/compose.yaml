@@ -8,7 +8,7 @@ services:
       POSTGRES_USER: ${POSTGRES_USER:-hubcr}
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-hubcr-dev-only}
     ports:
-      - "${HUBCR_POSTGRES_PORT:-5432}:5432"
+      - "127.0.0.1:${HUBCR_POSTGRES_PORT:-5432}:5432"
     volumes:
       - postgres-data:/var/lib/postgresql/data
     healthcheck:
@@ -21,7 +21,7 @@ services:
     image: redis:7-alpine
     command: ["redis-server", "--appendonly", "yes"]
     ports:
-      - "${HUBCR_REDIS_PORT:-6379}:6379"
+      - "127.0.0.1:${HUBCR_REDIS_PORT:-6379}:6379"
     volumes:
       - redis-data:/data
 
@@ -32,8 +32,8 @@ services:
       MINIO_ROOT_USER: ${MINIO_ROOT_USER:-hubcr}
       MINIO_ROOT_PASSWORD: ${MINIO_ROOT_PASSWORD:-hubcr-dev-only}
     ports:
-      - "${HUBCR_MINIO_PORT:-9000}:9000"
-      - "${HUBCR_MINIO_CONSOLE_PORT:-9001}:9001"
+      - "127.0.0.1:${HUBCR_MINIO_PORT:-9000}:9000"
+      - "127.0.0.1:${HUBCR_MINIO_CONSOLE_PORT:-9001}:9001"
     volumes:
       - minio-data:/data
 
@@ -65,7 +65,7 @@ services:
       REGISTRY_AUTH_TOKEN_ISSUER: ${HUBCR_REGISTRY_ISSUER:-hubcr-token-service}
       REGISTRY_AUTH_TOKEN_JWKS: /run/hubcr/registry-auth/jwks.json
       REGISTRY_NOTIFICATIONS_ENDPOINTS_0_URL: http://host.docker.internal:${HUBCR_API_PORT:-8080}/internal/registry/events
-      REGISTRY_NOTIFICATIONS_ENDPOINTS_0_HEADERS: "Authorization: [Bearer ${HUBCR_REGISTRY_EVENT_TOKEN:-hubcr-registry-event-dev-only-000000000000}]"
+      REGISTRY_NOTIFICATIONS_ENDPOINTS_0_HEADERS: "Authorization: [Bearer ${HUBCR_REGISTRY_EVENT_TOKEN:?run make registry-dev-keys first}]"
     extra_hosts:
       - "host.docker.internal:host-gateway"
     ports:
@@ -87,7 +87,7 @@ services:
       HUBCR_GATEWAY_API_PORT: ${HUBCR_API_PORT:-8080}
       NGINX_ENVSUBST_FILTER: ^HUBCR_GATEWAY_
     ports:
-      - "${HUBCR_REGISTRY_PORT:-5000}:5000"
+      - "127.0.0.1:${HUBCR_REGISTRY_PORT:-5000}:5000"
     volumes:
       - ./gateway/default.conf.template:/etc/nginx/templates/hubcr.conf.template:ro
 

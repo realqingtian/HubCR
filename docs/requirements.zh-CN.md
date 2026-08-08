@@ -80,10 +80,10 @@ hubcr.io/{namespace}/{repository}:{tag}
 | --- | --- | --- |
 | Go API | 进程装配、PostgreSQL 生命周期、健康检查、本地 Session、组织/成员、受 Policy 保护的 Repository 与 Artifact/Tag API、Registry Token 签发、经过认证的 Distribution Push 事件接入及 Registry 运维指标/日志 | 账号 Bootstrap/邀请兑换 |
 | Go Worker | 可配置轮询循环与优雅退出 | PostgreSQL 任务领取与安全任务 |
-| Web | 登录态 Shell、Overview、Namespace 与 Repository Detail 路由，以及经运行时校验的认证、组织/成员和 Repository 管理客户端与流程 | 账号 Bootstrap/邀请兑换、公开发现、Artifact/Tag 发现及 Registry Quick-start 流程 |
+| Web | 登录态 Shell、Overview、Namespace、Repository、Policy 支持的 Registry Quick-start、Artifact/Tag 列表与不可变 Digest 详情路由，以及经运行时校验的管理客户端与流程 | 账号 Bootstrap/邀请兑换及公开发现 |
 | OCI 数据面 | 已有 MinIO 支持且受 Token 保护的本地 Distribution Gateway，并通过授权 Docker/OCI 检查及向控制面投递 Push 事件 | Delete 事件协调与获批的生命周期行为 |
 | 基础设施 | PostgreSQL、Redis、MinIO、Distribution 的 Compose 定义（含仅监听 Loopback 的 Distribution 指标/队列可见性）；控制面 PostgreSQL 连接及覆盖到 Artifact/Tag 元数据的带版本 GORM 迁移 | Worker/Redis 连接、任务 Schema 迁移和生产部署 |
-| 质量保障 | Go 与 Web 单元检查、隔离 PostgreSQL 持久化/HTTP/跨租户测试、稳定 Playwright 状态测试、真实 M1 全栈浏览器流程、完整 M2 Docker/OCI 授权矩阵、事件驱动元数据、Artifact API、运维遥测和仓库级 `make check` | 后续安全端到端套件 |
+| 质量保障 | Go 与 Web 单元检查、隔离 PostgreSQL 持久化/HTTP/跨租户测试、稳定 Playwright 状态测试、真实 M1 浏览器流程、完整 M2 Docker/OCI 授权矩阵及真实 Distribution Push-to-Web Artifact 发现旅程 | 后续安全端到端套件 |
 
 在第 9 节 MVP 退出标准全部通过前，当前脚手架既不能用于生产，也不能被描述成已可用
 的多用户 Registry。
@@ -100,7 +100,7 @@ hubcr.io/{namespace}/{repository}:{tag}
 | FR-ID-001 | MUST | 用户可以通过已确认的首期身份方式完成认证，并获得可撤销的 Web 会话。 |
 | FR-ID-002 | MUST | 控制面在每个受保护 API 请求中识别当前用户，并拒绝无效、过期或已撤销的会话。 |
 | FR-ID-003 | MUST | 每个用户拥有一个名称唯一且规范化的稳定个人命名空间。 |
-| FR-ID-004 | MUST | 如果确认采用本地凭据，密码绝不以明文存储，认证接口应具备接入限流的边界。 |
+| FR-ID-004 | MUST | 密码绝不以明文存储，每个本地密码校验接口都必须使用有界的尝试次数与并发准入控制。 |
 | FR-ID-005 | DEFERRED | 邮箱验证、密码找回、MFA 和其他 OIDC Provider 随公网服务决策进入后续阶段。 |
 
 [D-002](decisions/d-002-registration.zh-CN.md) 与
@@ -206,6 +206,8 @@ Web 会话与 Registry Token 是两种独立凭据。实现 FR-REG-002 前必须
 - 签名密钥和 Secret 必须在源码仓库外安全保存并支持轮换。
 - 数据库、Redis、对象存储和 Distribution 均遵循最小权限。
 - 第一次对外部署前完成会话认证与 Registry Token 交换的威胁模型。
+- 认证准入状态必须有界，Web Login 与 Registry 凭据校验必须使用同一个控制；多副本
+  部署需要共享的 Limiter 状态。
 
 ### 可靠性与一致性
 

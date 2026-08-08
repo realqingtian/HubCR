@@ -9,7 +9,10 @@ import (
 	"time"
 )
 
-const sessionSecretBytes = 32
+const (
+	sessionSecretBytes                        = 32
+	defaultMaxConcurrentPasswordVerifications = 4
+)
 
 var (
 	ErrUnauthenticated = errors.New("authentication failed")
@@ -30,15 +33,16 @@ type LoginLimiter interface {
 	Allow(context.Context, LoginAttempt) error
 }
 
-type AllowAllLoginLimiter struct{}
-
-func (AllowAllLoginLimiter) Allow(context.Context, LoginAttempt) error { return nil }
+type loginSuccessRecorder interface {
+	Succeeded(LoginAttempt)
+}
 
 type ServiceOptions struct {
-	SessionTTL time.Duration
-	Random     io.Reader
-	Clock      func() time.Time
-	Limiter    LoginLimiter
+	SessionTTL                         time.Duration
+	Random                             io.Reader
+	Clock                              func() time.Time
+	Limiter                            LoginLimiter
+	MaxConcurrentPasswordVerifications int
 }
 
 type Service struct {
@@ -48,6 +52,7 @@ type Service struct {
 	random        io.Reader
 	clock         func() time.Time
 	limiter       LoginLimiter
+	passwordSlots chan struct{}
 	dummyPassword string
 }
 
@@ -72,6 +77,13 @@ func NewService(store Store, passwords PasswordCodec, options ServiceOptions) (*
 	if err != nil {
 		return nil, fmt.Errorf("initialize constant-work authentication hash: %w", err)
 	}
+	maxPasswordVerifications := options.MaxConcurrentPasswordVerifications
+	if maxPasswordVerifications == 0 {
+		maxPasswordVerifications = defaultMaxConcurrentPasswordVerifications
+	}
+	if maxPasswordVerifications < 0 {
+		return nil, errors.New("maximum concurrent password verifications must not be negative")
+	}
 	return &Service{
 		store:         store,
 		passwords:     passwords,
@@ -79,19 +91,17 @@ func NewService(store Store, passwords PasswordCodec, options ServiceOptions) (*
 		random:        options.Random,
 		clock:         options.Clock,
 		limiter:       options.Limiter,
+		passwordSlots: make(chan struct{}, maxPasswordVerifications),
 		dummyPassword: dummyPassword,
 	}, nil
 }
 
 func (s *Service) Login(ctx context.Context, input LoginInput) (LoginResult, error) {
-	if err := s.limiter.Allow(ctx, LoginAttempt{Username: input.Username, Key: input.RateLimitKey}); err != nil {
-		if errors.Is(err, ErrRateLimited) {
-			return LoginResult{}, ErrRateLimited
-		}
-		return LoginResult{}, fmt.Errorf("check login limit: %w", err)
-	}
-
-	user, err := s.AuthenticatePassword(ctx, input.Username, input.Password)
+	user, err := s.AuthenticatePasswordAttempt(
+		ctx,
+		LoginAttempt{Username: input.Username, Key: input.RateLimitKey},
+		input.Password,
+	)
 	if err != nil {
 		return LoginResult{}, err
 	}
@@ -119,10 +129,38 @@ func (s *Service) Login(ctx context.Context, input LoginInput) (LoginResult, err
 	return LoginResult{User: user, Token: token, ExpiresAt: expiresAt}, nil
 }
 
-// AuthenticatePassword verifies a local credential without creating a web session.
-// Registry adapters use this boundary so Registry credentials and browser sessions
-// remain separate.
-func (s *Service) AuthenticatePassword(ctx context.Context, username string, password []byte) (User, error) {
+// AuthenticatePasswordAttempt admits and verifies a local credential without
+// creating a web session. Every password-verification adapter uses this boundary.
+func (s *Service) AuthenticatePasswordAttempt(
+	ctx context.Context,
+	attempt LoginAttempt,
+	password []byte,
+) (User, error) {
+	if err := s.limiter.Allow(ctx, attempt); err != nil {
+		if errors.Is(err, ErrRateLimited) {
+			return User{}, ErrRateLimited
+		}
+		return User{}, fmt.Errorf("check login limit: %w", err)
+	}
+	select {
+	case s.passwordSlots <- struct{}{}:
+		defer func() { <-s.passwordSlots }()
+	case <-ctx.Done():
+		return User{}, ctx.Err()
+	default:
+		return User{}, ErrRateLimited
+	}
+	user, err := s.authenticatePassword(ctx, attempt.Username, password)
+	if err != nil {
+		return User{}, err
+	}
+	if recorder, ok := s.limiter.(loginSuccessRecorder); ok {
+		recorder.Succeeded(attempt)
+	}
+	return user, nil
+}
+
+func (s *Service) authenticatePassword(ctx context.Context, username string, password []byte) (User, error) {
 	identity, err := s.store.CredentialByUsername(ctx, username)
 	if err != nil {
 		if !errors.Is(err, ErrNotFound) {

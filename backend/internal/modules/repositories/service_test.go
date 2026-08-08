@@ -89,6 +89,39 @@ func TestServiceDiscoveryFiltersPrivateRepositories(t *testing.T) {
 	}
 }
 
+func TestDetailWithCapabilitiesUsesCentralizedRegistryPolicy(t *testing.T) {
+	t.Parallel()
+	tests := []struct {
+		name       string
+		access     NamespaceAccess
+		visibility Visibility
+		canPull    bool
+		canPush    bool
+	}{
+		{name: "personal owner private", access: personalAccess(true), visibility: VisibilityPrivate, canPull: true, canPush: true},
+		{name: "organization writer private", access: organizationAccess(organizations.RoleWriter), visibility: VisibilityPrivate, canPull: true, canPush: true},
+		{name: "organization reader private", access: organizationAccess(organizations.RoleReader), visibility: VisibilityPrivate, canPull: true},
+		{name: "organization outsider public", access: organizationAccess(""), visibility: VisibilityPublic, canPull: true},
+	}
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			store := &serviceStore{access: test.access, byName: serviceRepository(test.visibility)}
+			service := newTestService(t, store)
+			detail, err := service.DetailWithCapabilities(
+				context.Background(), serviceUserID, "platform-team", "backend",
+			)
+			if err != nil {
+				t.Fatalf("DetailWithCapabilities() error = %v", err)
+			}
+			if detail.Repository.Visibility != test.visibility ||
+				detail.Capabilities.CanPull != test.canPull ||
+				detail.Capabilities.CanPush != test.canPush {
+				t.Fatalf("DetailWithCapabilities() = %#v", detail)
+			}
+		})
+	}
+}
+
 func TestServiceUpdateChecksEachCapabilityAndRecordsVisibilityActor(t *testing.T) {
 	t.Parallel()
 	newDescription := "new description"

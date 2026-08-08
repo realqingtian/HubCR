@@ -24,6 +24,7 @@ var (
 	ErrInvalidRequest     = errors.New("invalid Registry token request")
 	ErrUnsupportedRequest = errors.New("unsupported Registry token request")
 	ErrInvalidCredentials = errors.New("invalid Registry credentials")
+	ErrRateLimited        = errors.New("Registry authentication rate limit exceeded")
 	ErrUnavailable        = errors.New("Registry token service unavailable")
 	ErrInvalidToken       = errors.New("invalid Registry token")
 )
@@ -65,10 +66,11 @@ type Claims struct {
 }
 
 type IssueRequest struct {
-	Service     string
-	RawScopes   []string
-	ClientID    string
-	Credentials *Credentials
+	Service      string
+	RawScopes    []string
+	ClientID     string
+	RateLimitKey string
+	Credentials  *Credentials
 }
 
 type IssueResult struct {

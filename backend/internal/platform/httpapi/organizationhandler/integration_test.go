@@ -20,6 +20,7 @@ import (
 	"hubcr.io/hubcr/internal/platform/postgres"
 	"hubcr.io/hubcr/internal/platform/postgres/authstore"
 	"hubcr.io/hubcr/internal/platform/postgres/organizationstore"
+	"hubcr.io/hubcr/internal/testsupport/authlimit"
 	"hubcr.io/hubcr/migrations"
 )
 
@@ -55,7 +56,7 @@ func TestOrganizationHTTPFlowWithPostgres(t *testing.T) {
 	}
 	authService, err := auth.NewService(identityStore, hasher, auth.ServiceOptions{
 		SessionTTL: time.Hour, Random: bytes.NewReader(bytes.Repeat([]byte{8}, 32)),
-		Clock: func() time.Time { return now }, Limiter: auth.AllowAllLoginLimiter{},
+		Clock: func() time.Time { return now }, Limiter: authlimit.AllowAll{},
 	})
 	if err != nil {
 		t.Fatalf("auth.NewService() error = %v", err)

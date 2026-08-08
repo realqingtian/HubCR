@@ -83,9 +83,11 @@ recovers automatically when the dependency returns.
   `Secure` defaults to `false` only for local HTTP development; HTTPS deployments must
   set `HUBCR_SESSION_COOKIE_SECURE=true`.
 - Login and logout reject browser requests marked `Sec-Fetch-Site: cross-site`.
-- Login calls an explicit rate-limit adapter before credential lookup. The current
-  self-hosted foundation uses an allow-all adapter until Redis-backed limits are
-  implemented; the public-service mode remains unavailable.
+- Login and Registry Basic authentication share one bounded password-attempt boundary
+  before credential lookup and Argon2 work. The single-process MVP limits attempts by
+  normalized account and direct client, caps concurrent verification, and returns
+  `429 rate_limited` when admission is denied. Multi-replica deployment requires the
+  planned shared Redis implementation; public-service mode remains unavailable.
 
 ## Registry token protocol
 
@@ -138,7 +140,10 @@ canonical path `/api/v1/namespaces/{namespace}/repositories/{repository}`.
   outside the namespace sees only explicitly `PUBLIC` repositories; personal owners
   and all organization roles may also discover `PRIVATE` repositories.
 - `GET .../{repository}` returns `404` for a missing repository and for a private
-  repository the caller cannot discover, avoiding private-existence disclosure.
+  repository the caller cannot discover, avoiding private-existence disclosure. A
+  successful detail response includes caller-specific `capabilities.can_pull` and
+  `capabilities.can_push` booleans computed by the centralized policy. It does not
+  expose or require the client to reproduce organization roles.
 - `PATCH .../{repository}` can change `description`, `visibility`, or both. Personal
   owners and organization `OWNER`/`ADMIN` may change visibility; organization
   `WRITER` may edit descriptions but cannot change visibility; `READER` cannot mutate

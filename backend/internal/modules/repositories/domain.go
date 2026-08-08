@@ -49,6 +49,20 @@ type Repository struct {
 	UpdatedAt                 time.Time
 }
 
+// RepositoryCapabilities contains caller-specific Registry actions decided by the
+// centralized authorization policy for one discovered repository.
+type RepositoryCapabilities struct {
+	CanPull bool
+	CanPush bool
+}
+
+// RepositoryDetail keeps persisted repository state separate from caller-specific
+// capabilities used by presentation adapters.
+type RepositoryDetail struct {
+	Repository   Repository
+	Capabilities RepositoryCapabilities
+}
+
 type NewRepository struct {
 	NamespaceID     string
 	RequestedName   string

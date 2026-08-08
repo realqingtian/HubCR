@@ -325,7 +325,7 @@ paths:
           content:
             application/json:
               schema:
-                $ref: "#/components/schemas/Repository"
+                $ref: "#/components/schemas/RepositoryDetail"
         "401":
           $ref: "#/components/responses/AuthenticationFailed"
         "404":
@@ -821,6 +821,26 @@ components:
             $ref: "#/components/schemas/Repository"
         meta:
           $ref: "#/components/schemas/PageMeta"
+    RepositoryCapabilities:
+      type: object
+      additionalProperties: false
+      required:
+        - can_pull
+        - can_push
+      properties:
+        can_pull:
+          type: boolean
+        can_push:
+          type: boolean
+    RepositoryDetail:
+      allOf:
+        - $ref: "#/components/schemas/Repository"
+        - type: object
+          required:
+            - capabilities
+          properties:
+            capabilities:
+              $ref: "#/components/schemas/RepositoryCapabilities"
     ArtifactKind:
       type: string
       enum:

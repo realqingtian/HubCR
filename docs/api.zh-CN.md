@@ -74,8 +74,10 @@ Liveness 只反映进程状态。必需的 PostgreSQL 不可访问时，Readines
   本地 HTTP 开发环境默认 `false`；HTTPS 部署必须设置
   `HUBCR_SESSION_COOKIE_SECURE=true`。
 - Login 与 Logout 会拒绝标记为 `Sec-Fetch-Site: cross-site` 的浏览器请求。
-- Login 在查询凭据前调用显式限流 Adapter。当前自托管基础暂用 Allow-All Adapter，
-  直到接入 Redis 限流；公网服务模式仍不可用。
+- Login 与 Registry Basic Authentication 在查询凭据和执行 Argon2 前共享一个有界密码
+  尝试边界。单进程 MVP 按规范化账号与直接 Client 限制尝试、限制并发校验，并在拒绝
+  准入时返回 `429 rate_limited`。多副本部署需要计划中的共享 Redis 实现；公网服务模式
+  仍不可用。
 
 ## Registry Token 协议
 
@@ -123,7 +125,9 @@ Liveness 只反映进程状态。必需的 PostgreSQL 不可访问时，Readines
   调用者只能看到显式 `PUBLIC` Repository；个人所有者和全部组织角色还可发现
   `PRIVATE` Repository。
 - `GET .../{repository}` 在 Repository 不存在或调用者无权发现私有 Repository 时均
-  返回 `404`，避免泄露私有资源是否存在。
+  返回 `404`，避免泄露私有资源是否存在。成功的 Detail Response 包含由集中 Policy
+  计算的调用者专属 `capabilities.can_pull` 与 `capabilities.can_push` Boolean；它不暴露
+  组织角色，也不要求 Client 重现角色矩阵。
 - `PATCH .../{repository}` 可修改 `description`、`visibility` 或二者。个人所有者与
   组织 `OWNER`/`ADMIN` 可修改可见性；组织 `WRITER` 可编辑说明但不能修改可见性；
   `READER` 不能修改 Repository 元数据。

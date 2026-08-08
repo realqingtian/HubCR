@@ -91,10 +91,10 @@ As of 2026-08-01, the repository contains:
 | --- | --- | --- |
 | Go API | Process composition, PostgreSQL lifecycle, health, local session, organization/member, policy-protected repository and Artifact/Tag APIs, Registry token issuance, authenticated Distribution push-event ingestion, and Registry operational metrics/logs | Account bootstrap/invitation redemption |
 | Go worker | Configured polling loop and graceful shutdown | PostgreSQL job claiming and security jobs |
-| Web | Authenticated shell with overview, namespace and repository-detail routes plus runtime-validated auth, organization/member, and repository-management clients and flows | Account bootstrap/invitation redemption, public discovery, artifact/tag discovery, and Registry quick-start workflows |
+| Web | Authenticated shell with overview, namespace, repository, policy-backed Registry quick-start, Artifact/Tag lists, and immutable Digest detail routes plus runtime-validated management clients and flows | Account bootstrap/invitation redemption and public discovery |
 | OCI data plane | Token-protected local Distribution gateway backed by MinIO with authorized Docker/OCI checks and push-event delivery to the control plane | Delete-event reconciliation and approved lifecycle behavior |
 | Infrastructure | Compose definitions for PostgreSQL, Redis, MinIO and Distribution, including loopback-only Distribution metrics/queue visibility; control-plane PostgreSQL connection and versioned GORM migrations through artifact/tag metadata | Worker/Redis connections, job schema migrations and production deployment |
-| Quality | Go and web unit checks, isolated PostgreSQL persistence/HTTP/cross-tenant tests, deterministic Playwright state tests, a real M1 full-stack browser journey, the complete M2 Docker/OCI authorization matrix, event-driven metadata, Artifact APIs, operational telemetry, and repository-wide `make check` | Later security end-to-end suites |
+| Quality | Go and web unit checks, isolated PostgreSQL persistence/HTTP/cross-tenant tests, deterministic Playwright state tests, real M1 browser journeys, the complete M2 Docker/OCI authorization matrix, and a real Distribution Push-to-Web Artifact discovery journey | Later security end-to-end suites |
 
 The scaffold is not production-ready and must not be described as a functioning
 multi-user registry until the MVP exit criteria in section 9 pass.
@@ -111,7 +111,7 @@ when it does not block the MVP, and **DEFERRED** belongs to a later milestone.
 | FR-ID-001 | MUST | A user can authenticate through the approved initial identity method and receive a revocable web session. |
 | FR-ID-002 | MUST | The control plane identifies the current user on every protected API request and rejects invalid, expired, or revoked sessions. |
 | FR-ID-003 | MUST | Each user has one stable personal namespace with a unique, normalized name. |
-| FR-ID-004 | MUST | Passwords, if local credentials are approved, are never stored in plaintext and authentication endpoints are rate-limit ready. |
+| FR-ID-004 | MUST | Passwords are never stored in plaintext, and every local password-verification endpoint uses bounded attempt and concurrency admission. |
 | FR-ID-005 | DEFERRED | Email verification, password recovery, MFA, and additional OIDC providers follow the public-service decision. |
 
 [D-002](decisions/d-002-registration.md) and
@@ -223,6 +223,9 @@ Mandatory data constraints are:
 - Apply least privilege to database, Redis, object-storage, and Distribution access.
 - Produce a threat model for session authentication and Registry token exchange
   before the first external deployment.
+- Keep authentication admission state bounded and apply the same control to Web login
+  and Registry credential verification; multi-replica deployment requires shared
+  limiter state.
 
 ### Reliability and consistency
 

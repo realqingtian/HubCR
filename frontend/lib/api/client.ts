@@ -1,14 +1,21 @@
 import type { z } from "zod";
 import {
+  artifactListSchema,
+  artifactDetailSchema,
   errorEnvelopeSchema,
   healthResponseSchema,
   loginResponseSchema,
   membershipListSchema,
   organizationListSchema,
   organizationSchema,
+  repositoryDetailSchema,
   repositoryListSchema,
   repositorySchema,
+  tagListSchema,
+  tagSchema,
   userSchema,
+  type Artifact,
+  type ArtifactList,
   type FieldError,
   type HealthResponse,
   type LoginResponse,
@@ -17,8 +24,11 @@ import {
   type OrganizationList,
   type OrganizationRole,
   type Repository,
+  type RepositoryDetail,
   type RepositoryList,
   type RepositoryVisibility,
+  type Tag,
+  type TagList,
   type User,
 } from "./schemas";
 
@@ -160,10 +170,38 @@ export async function listRepositories(namespace: string, input?: PageInput): Pr
   );
 }
 
-export async function getRepository(namespace: string, name: string): Promise<Repository> {
+export async function getRepository(namespace: string, name: string): Promise<RepositoryDetail> {
   return request(
     `/api/v1/namespaces/${encodeURIComponent(namespace)}/repositories/${encodeURIComponent(name)}`,
-    repositorySchema,
+    repositoryDetailSchema,
+  );
+}
+
+export async function listArtifacts(namespace: string, repository: string, input?: PageInput): Promise<ArtifactList> {
+  return request(
+    `/api/v1/namespaces/${encodeURIComponent(namespace)}/repositories/${encodeURIComponent(repository)}/artifacts${pageQuery(input)}`,
+    artifactListSchema,
+  );
+}
+
+export async function getArtifact(namespace: string, repository: string, digest: string): Promise<Artifact> {
+  return request(
+    `/api/v1/namespaces/${encodeURIComponent(namespace)}/repositories/${encodeURIComponent(repository)}/artifacts/${encodeURIComponent(digest)}`,
+    artifactDetailSchema,
+  );
+}
+
+export async function listTags(namespace: string, repository: string, input?: PageInput): Promise<TagList> {
+  return request(
+    `/api/v1/namespaces/${encodeURIComponent(namespace)}/repositories/${encodeURIComponent(repository)}/tags${pageQuery(input)}`,
+    tagListSchema,
+  );
+}
+
+export async function getTag(namespace: string, repository: string, tag: string): Promise<Tag> {
+  return request(
+    `/api/v1/namespaces/${encodeURIComponent(namespace)}/repositories/${encodeURIComponent(repository)}/tags/${encodeURIComponent(tag)}`,
+    tagSchema,
   );
 }
 
@@ -192,12 +230,19 @@ export async function updateRepository(
 }
 
 export type {
+  Artifact,
+  ArtifactList,
   LoginResponse,
+  ManifestDescriptor,
   Organization,
   OrganizationList,
   OrganizationRole,
   Repository,
+  RepositoryCapabilities,
+  RepositoryDetail,
   RepositoryList,
   RepositoryVisibility,
+  Tag,
+  TagList,
   User,
 } from "./schemas";

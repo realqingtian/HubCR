@@ -283,6 +283,7 @@ Distribution JSON 错误结构：
 | Scope 格式错误、Type/Action 不支持、`client_id` 无效 | `400` | `DENIED` |
 | `offline_token` 重复或不是布尔值 | `400` | `DENIED` |
 | 凭据格式错误、不支持或无效 | `401` | `UNAUTHORIZED` |
+| 密码尝试准入被拒绝 | `429` | `TOOMANYREQUESTS` |
 | 方法不支持 | `405` | `UNSUPPORTED` |
 | Policy Lookup 或签名依赖不可用 | `503` | `UNAVAILABLE` |
 | 意外内部错误 | `500` | `UNKNOWN` |
@@ -305,8 +306,9 @@ Duration。
 - 验证前的任意 Parser 输入；
 - 包含敏感值的数据库错误。
 
-M2-01 不定义 Rate Limit 产品策略，但 M2-03 必须限制 Request Body/Query 大小与
-Scope 数量。部署级 Rate Limit 可以在不改变授权事实的情况下加入。
+Rate Limit 不是授权 Policy，但单进程 MVP 的每条密码校验路径都使用有界的尝试与并发
+准入，同时限制 Request Body/Query 大小和 Scope 数量。多副本部署需要共享 Limiter
+状态，且不得改变授权事实。
 
 ## 11. 实现后必须提供的验收证据
 

@@ -2,7 +2,9 @@
 
 import { useQuery } from "@tanstack/react-query";
 import Link from "next/link";
+import { ArtifactExplorer } from "@/features/artifacts/artifact-explorer";
 import { friendlyError, PanelMessage } from "@/features/shared/feedback";
+import { RepositoryQuickStart } from "@/features/repositories/repository-quick-start";
 import { APIError, getRepository } from "@/lib/api/client";
 
 export function RepositoryPage({ namespace, repository }: Readonly<{ namespace: string; repository: string }>) {
@@ -74,11 +76,14 @@ function RepositoryDetail({ repository }: Readonly<{ repository: Awaited<ReturnT
         </dl>
       </section>
 
-      <section aria-labelledby="artifact-availability" className="rounded-2xl border border-dashed border-slate-300 bg-slate-50 p-5 sm:p-6">
-        <p className="text-xs font-semibold uppercase tracking-[0.18em] text-slate-500">Unavailable in this web build</p>
-        <h2 className="mt-2 text-lg font-semibold text-slate-950" id="artifact-availability">Artifacts and tags</h2>
-        <p className="mt-2 max-w-3xl text-sm leading-6 text-slate-600">Artifact and Tag metadata is available from the authorized control-plane API, but discovery is not exposed in the web application yet. No scan, signature, or trust status is inferred here.</p>
-      </section>
+      <RepositoryQuickStart
+        capabilities={repository.capabilities}
+        namespace={repository.namespace}
+        repository={repository.name}
+        visibility={repository.visibility}
+      />
+
+      <ArtifactExplorer namespace={repository.namespace} repository={repository.name} />
     </div>
   );
 }

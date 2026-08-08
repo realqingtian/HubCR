@@ -11,6 +11,7 @@ import (
 
 	"hubcr.io/hubcr/internal/modules/auth"
 	"hubcr.io/hubcr/internal/platform/postgres"
+	"hubcr.io/hubcr/internal/testsupport/authlimit"
 	"hubcr.io/hubcr/migrations"
 )
 
@@ -205,7 +206,7 @@ func TestAuthServiceWithPostgresStore(t *testing.T) {
 		SessionTTL: time.Hour,
 		Random:     bytes.NewReader(bytes.Repeat([]byte{9}, 32)),
 		Clock:      func() time.Time { return now },
-		Limiter:    auth.AllowAllLoginLimiter{},
+		Limiter:    authlimit.AllowAll{},
 	})
 	if err != nil {
 		t.Fatalf("auth.NewService() error = %v", err)

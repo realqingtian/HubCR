@@ -222,6 +222,15 @@ func TestServiceClassifiesCredentialsAndDependencyFailures(t *testing.T) {
 			want:        ErrUnavailable,
 		},
 		{
+			name: "authentication rate limit",
+			authenticator: serviceAuthenticator{
+				err: ErrRateLimited,
+			},
+			resolver:    &serviceRepositoryResolver{},
+			credentials: validRegistryCredentials(),
+			want:        ErrRateLimited,
+		},
+		{
 			name:          "repository dependency",
 			authenticator: serviceAuthenticator{subject: Subject{ID: registryTestSubject}},
 			resolver: &serviceRepositoryResolver{
@@ -339,13 +348,13 @@ type serviceAuthenticator struct {
 	err     error
 }
 
-func (a serviceAuthenticator) Authenticate(context.Context, string, []byte) (Subject, error) {
+func (a serviceAuthenticator) Authenticate(context.Context, string, []byte, string) (Subject, error) {
 	return a.subject, a.err
 }
 
 type countingAuthenticator struct{ calls int }
 
-func (a *countingAuthenticator) Authenticate(context.Context, string, []byte) (Subject, error) {
+func (a *countingAuthenticator) Authenticate(context.Context, string, []byte, string) (Subject, error) {
 	a.calls++
 	return Subject{ID: registryTestSubject}, nil
 }

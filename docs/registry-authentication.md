@@ -309,6 +309,7 @@ the Distribution JSON error shape:
 | Malformed scope, unsupported type/action, invalid `client_id` | `400` | `DENIED` |
 | Repeated or non-Boolean `offline_token` | `400` | `DENIED` |
 | Malformed, unsupported, or invalid credentials | `401` | `UNAUTHORIZED` |
+| Password-attempt admission denied | `429` | `TOOMANYREQUESTS` |
 | Unsupported method | `405` | `UNSUPPORTED` |
 | Policy lookup or signing dependency unavailable | `503` | `UNAVAILABLE` |
 | Unexpected internal failure | `500` | `UNKNOWN` |
@@ -332,9 +333,10 @@ Never log:
 - arbitrary parser input before validation;
 - database errors containing sensitive values.
 
-Rate limiting is not defined as a product policy in M2-01, but M2-03 must expose a
-bounded request body/query size and a scope-count limit. Deployment-level rate limits
-may be added without changing authorization truth.
+Rate limiting is not an authorization policy, but every password-verification path
+uses bounded attempt and concurrency admission in the single-process MVP. Request
+body/query size and scope count are also bounded. Multi-replica deployment requires
+shared limiter state without changing authorization truth.
 
 ## 11. Acceptance evidence required after implementation
 

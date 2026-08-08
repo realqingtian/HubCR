@@ -5,6 +5,10 @@ const ownerID = "11111111-1111-4111-8111-111111111111";
 const organizationID = "22222222-2222-4222-8222-222222222222";
 const repositoryID = "33333333-3333-4333-8333-333333333333";
 const memberID = "44444444-4444-4444-8444-444444444444";
+const manifestDigest = "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa";
+const unknownIndexDigest = "sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb";
+const emptyIndexDigest = "sha256:cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc";
+const missingDigest = "sha256:dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd";
 const corsHeaders = {
   "Access-Control-Allow-Credentials": "true",
   "Access-Control-Allow-Headers": "Content-Type",
@@ -20,14 +24,71 @@ const user = {
   created_at: timestamp,
 };
 
+const repositoryFixture = {
+  id: repositoryID,
+  namespace: "owner",
+  name: "backend",
+  visibility: "PUBLIC",
+  description: "personal images",
+  created_by_user_id: ownerID,
+  visibility_updated_by_user_id: ownerID,
+  visibility_updated_at: timestamp,
+  created_at: timestamp,
+  updated_at: timestamp,
+};
+
+const manifestArtifact = {
+  digest: manifestDigest,
+  kind: "MANIFEST",
+  media_type: "application/vnd.oci.image.manifest.v1+json",
+  size_bytes: 512,
+  descriptors_complete: false,
+  discovered_at: timestamp,
+  updated_at: timestamp,
+};
+const unknownIndexArtifact = {
+  digest: unknownIndexDigest,
+  kind: "INDEX",
+  media_type: "application/vnd.oci.image.index.v1+json",
+  descriptors_complete: false,
+  discovered_at: timestamp,
+  updated_at: timestamp,
+};
+const emptyIndexArtifact = {
+  digest: emptyIndexDigest,
+  kind: "INDEX",
+  media_type: "application/vnd.oci.image.index.v1+json",
+  descriptors_complete: true,
+  discovered_at: timestamp,
+  updated_at: timestamp,
+  manifests: [],
+};
+
 function fulfill(route: Route, body: unknown, status = 200) {
   return route.fulfill({ status, headers: corsHeaders, body: JSON.stringify(body) });
 }
 
-async function installControlPlaneMock(page: Page, authenticatedInitially: boolean, denyRepositoryCreate = false) {
+type ArtifactMode = "success" | "empty" | "forbidden" | "failure";
+
+async function installControlPlaneMock(
+  page: Page,
+  authenticatedInitially: boolean,
+  options: Readonly<{
+    artifactMode?: ArtifactMode;
+    denyRepositoryCreate?: boolean;
+    repositoryCapabilities?: { can_pull: boolean; can_push: boolean };
+    seedRepository?: boolean;
+    seedVisibility?: "PUBLIC" | "PRIVATE";
+  }> = {},
+) {
   let authenticated = authenticatedInitially;
   let organizations: unknown[] = [];
-  const repositories = new Map<string, unknown[]>();
+  const repositories = new Map<string, unknown[]>(
+    options.seedRepository ? [["owner", [{
+      ...repositoryFixture,
+      visibility: options.seedVisibility ?? repositoryFixture.visibility,
+    }]]] : [],
+  );
   const members = new Map<string, unknown[]>();
 
   await page.route("**/api/v1/**", async (route) => {
@@ -95,7 +156,7 @@ async function installControlPlaneMock(page: Page, authenticatedInitially: boole
       return;
     }
     if (repositoryMatch && request.method() === "POST") {
-      if (denyRepositoryCreate) {
+      if (options.denyRepositoryCreate) {
         await fulfill(route, {
           error: { code: "forbidden", message: "repository action is forbidden" },
           request_id: "e2e-forbidden",
@@ -128,12 +189,66 @@ async function installControlPlaneMock(page: Page, authenticatedInitially: boole
         "name" in candidate && candidate.name === repositoryDetailMatch[2]
       ));
       if (repository !== undefined) {
-        await fulfill(route, repository);
+        await fulfill(route, {
+          ...repository,
+          capabilities: options.repositoryCapabilities ?? { can_pull: true, can_push: true },
+        });
         return;
       }
       await fulfill(route, {
         error: { code: "not_found", message: "resource not found" },
         request_id: "e2e-repository-not-found",
+      }, 404);
+      return;
+    }
+    const artifactListMatch = path.match(/^\/api\/v1\/namespaces\/([^/]+)\/repositories\/([^/]+)\/artifacts$/);
+    const tagListMatch = path.match(/^\/api\/v1\/namespaces\/([^/]+)\/repositories\/([^/]+)\/tags$/);
+    const artifactDetailMatch = path.match(/^\/api\/v1\/namespaces\/([^/]+)\/repositories\/([^/]+)\/artifacts\/([^/]+)$/);
+    if ((artifactListMatch || tagListMatch || artifactDetailMatch) && request.method() === "GET") {
+      const mode = options.artifactMode ?? "success";
+      if (mode === "forbidden") {
+        await fulfill(route, {
+          error: { code: "forbidden", message: "repository action is forbidden" },
+          request_id: "e2e-artifact-forbidden",
+        }, 403);
+        return;
+      }
+      if (mode === "failure") {
+        await fulfill(route, {
+          error: { code: "internal_error", message: "artifact service failed" },
+          request_id: "e2e-artifact-failure",
+        }, 503);
+        return;
+      }
+      if (artifactListMatch) {
+        await fulfill(route, {
+          items: mode === "empty" ? [] : [manifestArtifact, unknownIndexArtifact, emptyIndexArtifact],
+          meta: { limit: 100 },
+        });
+        return;
+      }
+      if (tagListMatch) {
+        await fulfill(route, {
+          items: mode === "empty" ? [] : [{
+            name: "latest",
+            digest: manifestDigest,
+            created_at: timestamp,
+            updated_at: timestamp,
+          }],
+          meta: { limit: 100 },
+        });
+        return;
+      }
+      const digest = decodeURIComponent(artifactDetailMatch?.[3] ?? "");
+      const artifact = [manifestArtifact, unknownIndexArtifact, emptyIndexArtifact]
+        .find((candidate) => candidate.digest === digest);
+      if (artifact) {
+        await fulfill(route, artifact);
+        return;
+      }
+      await fulfill(route, {
+        error: { code: "not_found", message: "resource not found" },
+        request_id: "e2e-artifact-not-found",
       }, 404);
       return;
     }
@@ -168,8 +283,20 @@ test("signs in and completes the personal and organization ownership flows", asy
   await page.getByRole("link", { name: "View repository" }).click();
   await expect(page).toHaveURL(/\/namespaces\/owner\/repositories\/backend$/);
   await expect(page.getByRole("heading", { name: "owner/backend" })).toBeVisible();
+  await expect(page.getByRole("heading", { name: "Quick start" })).toBeVisible();
+  await expect(page.getByText("docker login hubcr.io", { exact: true })).toBeVisible();
+  await expect(page.getByText("docker pull hubcr.io/owner/backend:TAG", { exact: true })).toBeVisible();
+  await expect(page.getByText(/docker push hubcr.io\/owner\/backend:TAG/)).toBeVisible();
   await expect(page.getByRole("heading", { name: "Artifacts and tags" })).toBeVisible();
-  await expect(page.getByText("Unavailable in this web build")).toBeVisible();
+  await expect(page.getByRole("heading", { name: "Current tags" })).toBeVisible();
+  await expect(page.getByText("latest", { exact: true })).toBeVisible();
+  await expect(page.getByText(manifestDigest, { exact: true }).first()).toBeVisible();
+  await page.getByRole("link", { name: "View immutable Artifact" }).click();
+  await expect(page).toHaveURL(new RegExp(`/artifacts/sha256(?:%3A|:)${"a".repeat(64)}$`, "i"));
+  await expect(page.getByRole("heading", { name: manifestDigest })).toBeVisible();
+  await expect(page.getByText("Manifest Artifact", { exact: true })).toBeVisible();
+  await expect(page.getByText(/Scan, signature presence, cryptographic validity/)).toBeVisible();
+  await page.getByLabel("Breadcrumb").getByRole("link", { name: "backend" }).click();
   await page.getByLabel("Breadcrumb").getByRole("link", { name: "Overview" }).click();
   await expect(page.getByRole("heading", { name: "Control-plane workspace" })).toBeVisible();
 
@@ -199,12 +326,82 @@ test("shows an actionable server-failure state", async ({ page }) => {
 });
 
 test("shows backend authorization denial instead of inferring permission", async ({ page }) => {
-  await installControlPlaneMock(page, true, true);
+  await installControlPlaneMock(page, true, { denyRepositoryCreate: true });
   await page.goto("/");
 
   await page.getByLabel("Name", { exact: true }).fill("denied-app");
   await page.getByRole("button", { name: "Create repository" }).click();
   await expect(page.getByText("Your account does not have permission for this action.", { exact: true })).toBeVisible();
+});
+
+test("shows truthful empty Artifact and Tag discovery states", async ({ page }) => {
+  await installControlPlaneMock(page, true, { artifactMode: "empty", seedRepository: true });
+  await page.goto("/namespaces/owner/repositories/backend");
+
+  await expect(page.getByText("No tags", { exact: true })).toBeVisible();
+  await expect(page.getByText("No artifacts", { exact: true })).toBeVisible();
+});
+
+test("shows public Pull but withholds Push commands from a read-only caller", async ({ page }) => {
+  await installControlPlaneMock(page, true, {
+    repositoryCapabilities: { can_pull: true, can_push: false },
+    seedRepository: true,
+  });
+  await page.goto("/namespaces/owner/repositories/backend");
+
+  await expect(page.getByText("This public pull does not require Registry login.")).toBeVisible();
+  await expect(page.getByText("docker pull hubcr.io/owner/backend:TAG", { exact: true })).toBeVisible();
+  await expect(page.getByText("Push access unavailable", { exact: true })).toBeVisible();
+  await expect(page.getByText("docker login hubcr.io", { exact: true })).toHaveCount(0);
+  await expect(page.getByText(/docker push hubcr.io\/owner\/backend:TAG/)).toHaveCount(0);
+});
+
+test("requires Registry login for a private read-only Repository", async ({ page }) => {
+  await installControlPlaneMock(page, true, {
+    repositoryCapabilities: { can_pull: true, can_push: false },
+    seedRepository: true,
+    seedVisibility: "PRIVATE",
+  });
+  await page.goto("/namespaces/owner/repositories/backend");
+
+  await expect(page.getByText("docker login hubcr.io", { exact: true })).toBeVisible();
+  await expect(page.getByText("docker pull hubcr.io/owner/backend:TAG", { exact: true })).toBeVisible();
+  await expect(page.getByText("Push access unavailable", { exact: true })).toBeVisible();
+});
+
+test("separates Artifact authorization denial from service failure", async ({ page }) => {
+  await installControlPlaneMock(page, true, { artifactMode: "forbidden", seedRepository: true });
+  await page.goto("/namespaces/owner/repositories/backend");
+
+  await expect(page.getByText("Current tags access denied", { exact: true })).toBeVisible();
+  await expect(page.getByText("Immutable artifacts access denied", { exact: true })).toBeVisible();
+  await expect(page.getByText("Your account does not have permission for this action.").first()).toBeVisible();
+});
+
+test("distinguishes unknown and confirmed-empty Index descriptor sets", async ({ page }) => {
+  await installControlPlaneMock(page, true);
+
+  await page.goto(`/namespaces/owner/repositories/backend/artifacts/${unknownIndexDigest}`);
+  await expect(page.getByText("Descriptor set unavailable", { exact: true })).toBeVisible();
+
+  await page.goto(`/namespaces/owner/repositories/backend/artifacts/${emptyIndexDigest}`);
+  await expect(page.getByText("Confirmed empty descriptor set", { exact: true })).toBeVisible();
+});
+
+test("keeps Artifact non-disclosure truthful on a direct route", async ({ page }) => {
+  await installControlPlaneMock(page, true);
+  await page.goto(`/namespaces/owner/repositories/backend/artifacts/${missingDigest}`);
+
+  await expect(page.getByText("Artifact not found", { exact: true })).toBeVisible();
+  await expect(page.getByText("The Digest does not exist in this repository or your session cannot discover it.")).toBeVisible();
+});
+
+test("rejects an invalid Artifact Digest route before making an API request", async ({ page }) => {
+  await installControlPlaneMock(page, true);
+  await page.goto("/namespaces/owner/repositories/backend/artifacts/not-a-digest");
+
+  await expect(page.getByRole("heading", { name: "Artifact route not found" })).toBeVisible();
+  await expect(page.getByText(/sha256:/)).toBeVisible();
 });
 
 test("keeps repository non-disclosure truthful on a direct route", async ({ page }) => {

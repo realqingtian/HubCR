@@ -148,7 +148,8 @@ func parseIssueRequest(request *http.Request) (registry.IssueRequest, error) {
 	}
 	return registry.IssueRequest{
 		Service: services[0], RawScopes: query["scope"], ClientID: clientID,
-		Credentials: credentials,
+		RateLimitKey: httpapi.ClientKey(request),
+		Credentials:  credentials,
 	}, nil
 }
 
@@ -180,6 +181,9 @@ func (h *Handler) writeIssueError(w http.ResponseWriter, request *http.Request, 
 	case errors.Is(err, registry.ErrInvalidCredentials):
 		w.Header().Set("WWW-Authenticate", `Basic realm="HubCR Registry"`)
 		h.writeError(w, request, http.StatusUnauthorized, "UNAUTHORIZED", "registry credentials are invalid")
+	case errors.Is(err, registry.ErrRateLimited):
+		w.Header().Set("Retry-After", "60")
+		h.writeError(w, request, http.StatusTooManyRequests, "TOOMANYREQUESTS", "too many authentication attempts")
 	case errors.Is(err, registry.ErrUnavailable):
 		h.writeError(w, request, http.StatusServiceUnavailable, "UNAVAILABLE", "token service is unavailable")
 	default:

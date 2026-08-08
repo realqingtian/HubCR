@@ -97,8 +97,67 @@ export const repositorySchema = z.object({
   updated_at: timestampSchema,
 });
 
+export const repositoryCapabilitiesSchema = z.object({
+  can_pull: z.boolean(),
+  can_push: z.boolean(),
+});
+
+export const repositoryDetailSchema = repositorySchema.extend({
+  capabilities: repositoryCapabilitiesSchema,
+});
+
 export const repositoryListSchema = z.object({
   items: z.array(repositorySchema),
+  meta: pageMetaSchema,
+});
+
+export const artifactDigestSchema = z.string().regex(/^sha256:[0-9a-f]{64}$/);
+export const artifactKindSchema = z.enum(["MANIFEST", "INDEX"]);
+export const artifactPlatformSchema = z.object({
+  os: z.string().min(1).max(64),
+  architecture: z.string().min(1).max(64),
+  variant: z.string().min(1).max(64).optional(),
+});
+export const manifestDescriptorSchema = z.object({
+  position: z.number().int().min(0),
+  digest: artifactDigestSchema,
+  media_type: z.string().min(1).max(255).optional(),
+  size_bytes: z.number().int().min(0).optional(),
+  platform: artifactPlatformSchema.optional(),
+});
+export const artifactSchema = z.object({
+  digest: artifactDigestSchema,
+  kind: artifactKindSchema,
+  media_type: z.string().min(1).max(255).optional(),
+  size_bytes: z.number().int().min(0).optional(),
+  source_created_at: timestampSchema.optional(),
+  descriptors_complete: z.boolean(),
+  discovered_at: timestampSchema,
+  updated_at: timestampSchema,
+  manifests: z.array(manifestDescriptorSchema).optional(),
+});
+export const artifactDetailSchema = artifactSchema.superRefine((artifact, context) => {
+  if (artifact.kind === "INDEX" && artifact.descriptors_complete && artifact.manifests === undefined) {
+    context.addIssue({ code: "custom", message: "a complete Index must include manifests" });
+  }
+  if ((artifact.kind !== "INDEX" || !artifact.descriptors_complete) && artifact.manifests !== undefined) {
+    context.addIssue({ code: "custom", message: "manifests require a complete Index" });
+  }
+});
+export const artifactListSchema = z.object({
+  items: z.array(artifactSchema),
+  meta: pageMetaSchema,
+});
+export const tagNameSchema = z.string().min(1).max(128).regex(/^[A-Za-z0-9_][A-Za-z0-9._-]{0,127}$/);
+export const tagSchema = z.object({
+  name: tagNameSchema,
+  digest: artifactDigestSchema,
+  created_at: timestampSchema,
+  updated_at: timestampSchema,
+  artifact: artifactSchema.optional(),
+});
+export const tagListSchema = z.object({
+  items: z.array(tagSchema),
   meta: pageMetaSchema,
 });
 
@@ -114,4 +173,11 @@ export type Membership = z.infer<typeof membershipSchema>;
 export type MembershipList = z.infer<typeof membershipListSchema>;
 export type RepositoryVisibility = z.infer<typeof repositoryVisibilitySchema>;
 export type Repository = z.infer<typeof repositorySchema>;
+export type RepositoryCapabilities = z.infer<typeof repositoryCapabilitiesSchema>;
+export type RepositoryDetail = z.infer<typeof repositoryDetailSchema>;
 export type RepositoryList = z.infer<typeof repositoryListSchema>;
+export type Artifact = z.infer<typeof artifactSchema>;
+export type ArtifactList = z.infer<typeof artifactListSchema>;
+export type ManifestDescriptor = z.infer<typeof manifestDescriptorSchema>;
+export type Tag = z.infer<typeof tagSchema>;
+export type TagList = z.infer<typeof tagListSchema>;

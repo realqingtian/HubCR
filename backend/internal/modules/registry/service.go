@@ -16,7 +16,7 @@ import (
 const jtiBytes = 16
 
 type CredentialAuthenticator interface {
-	Authenticate(context.Context, string, []byte) (Subject, error)
+	Authenticate(context.Context, string, []byte, string) (Subject, error)
 }
 
 type RepositoryResolver interface {
@@ -93,7 +93,7 @@ func (s *Service) Issue(ctx context.Context, request IssueRequest) (IssueResult,
 	if err != nil {
 		return IssueResult{}, err
 	}
-	subject, err := s.authenticate(ctx, request.Credentials)
+	subject, err := s.authenticate(ctx, request.Credentials, request.RateLimitKey)
 	if err != nil {
 		return IssueResult{}, err
 	}
@@ -131,17 +131,26 @@ func (s *Service) Issue(ctx context.Context, request IssueRequest) (IssueResult,
 	}, nil
 }
 
-func (s *Service) authenticate(ctx context.Context, credentials *Credentials) (Subject, error) {
+func (s *Service) authenticate(
+	ctx context.Context,
+	credentials *Credentials,
+	rateLimitKey string,
+) (Subject, error) {
 	if credentials == nil {
 		return Subject{}, nil
 	}
 	if credentials.Username == "" {
 		return Subject{}, ErrInvalidCredentials
 	}
-	subject, err := s.authenticator.Authenticate(ctx, credentials.Username, credentials.Password)
+	subject, err := s.authenticator.Authenticate(
+		ctx, credentials.Username, credentials.Password, rateLimitKey,
+	)
 	if err != nil {
 		if errors.Is(err, ErrInvalidCredentials) {
 			return Subject{}, ErrInvalidCredentials
+		}
+		if errors.Is(err, ErrRateLimited) {
+			return Subject{}, ErrRateLimited
 		}
 		return Subject{}, fmt.Errorf("%w: authenticate credentials", ErrUnavailable)
 	}

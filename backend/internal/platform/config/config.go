@@ -67,7 +67,7 @@ func LoadAPI() (API, error) {
 	}
 
 	return API{
-		Address:         stringValue("HUBCR_API_ADDRESS", ":8080"),
+		Address:         stringValue("HUBCR_API_ADDRESS", "127.0.0.1:8080"),
 		ShutdownTimeout: shutdownTimeout,
 		Database:        database,
 		Authentication:  authentication,

@@ -55,7 +55,8 @@ func TestRepositoryCreateListDetailAndUpdateRoutes(t *testing.T) {
 	detail := authenticatedRequest(http.MethodGet, "/api/v1/namespaces/platform-team/repositories/backend", "")
 	detailRecorder := httptest.NewRecorder()
 	handler.ServeHTTP(detailRecorder, detail)
-	if detailRecorder.Code != http.StatusOK || service.detailName != "backend" {
+	if detailRecorder.Code != http.StatusOK || service.detailName != "backend" ||
+		!strings.Contains(detailRecorder.Body.String(), `"capabilities":{"can_pull":true,"can_push":true}`) {
 		t.Fatalf("detail status/name/body = %d %q %s", detailRecorder.Code, service.detailName, detailRecorder.Body.String())
 	}
 
@@ -192,6 +193,18 @@ func (s *handlerTestRepositories) Detail(
 ) (repositories.Repository, error) {
 	s.detailName = repositoryName
 	return s.repository, s.serviceError
+}
+func (s *handlerTestRepositories) DetailWithCapabilities(
+	_ context.Context, _, _, repositoryName string,
+) (repositories.RepositoryDetail, error) {
+	s.detailName = repositoryName
+	return repositories.RepositoryDetail{
+		Repository: s.repository,
+		Capabilities: repositories.RepositoryCapabilities{
+			CanPull: true,
+			CanPush: true,
+		},
+	}, s.serviceError
 }
 func (s *handlerTestRepositories) Update(
 	_ context.Context, _, _, _ string, update repositories.UpdateRepository,

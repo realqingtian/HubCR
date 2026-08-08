@@ -109,6 +109,13 @@ func TestRepositoryHTTPAuthorizationAndVisibilityFlowWithPostgres(t *testing.T) 
 	if privateDetailRecorder.Code != http.StatusNotFound {
 		t.Fatalf("outsider private detail status/body = %d %s", privateDetailRecorder.Code, privateDetailRecorder.Body.String())
 	}
+	writerDetail := repositoryRequest(http.MethodGet, basePath+"/backend", "", writerCookie)
+	writerDetailRecorder := httptest.NewRecorder()
+	handler.ServeHTTP(writerDetailRecorder, writerDetail)
+	if writerDetailRecorder.Code != http.StatusOK ||
+		!strings.Contains(writerDetailRecorder.Body.String(), `"capabilities":{"can_pull":true,"can_push":true}`) {
+		t.Fatalf("writer private detail status/body = %d %s", writerDetailRecorder.Code, writerDetailRecorder.Body.String())
+	}
 
 	writerDescription := repositoryRequest(
 		http.MethodPatch, basePath+"/backend", `{"description":"writer updated"}`, writerCookie,
@@ -147,7 +154,8 @@ func TestRepositoryHTTPAuthorizationAndVisibilityFlowWithPostgres(t *testing.T) 
 	publicDetail := repositoryRequest(http.MethodGet, basePath+"/backend", "", outsiderCookie)
 	publicDetailRecorder := httptest.NewRecorder()
 	handler.ServeHTTP(publicDetailRecorder, publicDetail)
-	if publicDetailRecorder.Code != http.StatusOK {
+	if publicDetailRecorder.Code != http.StatusOK ||
+		!strings.Contains(publicDetailRecorder.Body.String(), `"capabilities":{"can_pull":true,"can_push":false}`) {
 		t.Fatalf("outsider public detail status/body = %d %s", publicDetailRecorder.Code, publicDetailRecorder.Body.String())
 	}
 	outsiderUpdate := repositoryRequest(

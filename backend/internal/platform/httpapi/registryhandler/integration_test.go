@@ -28,6 +28,7 @@ import (
 	"hubcr.io/hubcr/internal/platform/postgres/organizationstore"
 	"hubcr.io/hubcr/internal/platform/postgres/repositorystore"
 	"hubcr.io/hubcr/internal/platform/registryauth"
+	"hubcr.io/hubcr/internal/testsupport/authlimit"
 	"hubcr.io/hubcr/migrations"
 )
 
@@ -73,7 +74,7 @@ func TestRegistryTokenFlowWithGORMStoresAndPostgres(t *testing.T) {
 		SessionTTL: time.Hour,
 		Random:     bytes.NewReader(bytes.Repeat([]byte{7}, 64)),
 		Clock:      func() time.Time { return now },
-		Limiter:    auth.AllowAllLoginLimiter{},
+		Limiter:    authlimit.AllowAll{},
 	})
 	if err != nil {
 		t.Fatalf("auth.NewService() error = %v", err)

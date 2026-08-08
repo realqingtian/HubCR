@@ -15,9 +15,10 @@ macOS 上，AirPlay 接收器可能通过 `ControlCenter` 进程占用 `5000` �
 HUBCR_REGISTRY_PORT=5001 HUBCR_ENV_FILE=.env.example make infra-up
 ```
 
-请在仓库根目录使用 Make 工作流。`infra-up` 会先生成或验证被忽略的本地 RSA 私钥与
-JWKS，再把信任材料挂载到 Distribution。Target 默认读取 `.env`；只有使用文档所列
-本地默认值时才应指定 `.env.example`：
+请在仓库根目录使用 Make 工作流。`infra-up` 会先生成或验证被忽略的本地 RSA 私钥、
+JWKS 与随机事件 Token，再把信任材料挂载到 Distribution。全部开发宿主端口都绑定
+`127.0.0.1`。Target 默认读取 `.env`；只有使用文档所列本地默认值时才应指定
+`.env.example`：
 
 ```bash
 HUBCR_ENV_FILE=.env.example make infra-config
@@ -31,7 +32,8 @@ HUBCR_ENV_FILE=.env.example make infra-down
 Endpoint，并复用同一份被忽略的签名材料。直接启动 API 时，除非完整提供 Registry
 Auth 配置，否则保持 Fail Closed。
 API 与 Distribution 通知 Endpoint 还必须获得相同的 `HUBCR_REGISTRY_EVENT_TOKEN`；
-文档中的 Make 工作流会提供 `.env.example` 里明确标记为仅供开发的默认值。
+文档中的 Make 工作流会从被忽略的 `.data/registry-auth/event-token` 读取生成值。共享
+部署必须注入并轮换独立 Secret。
 
 覆盖 Registry 端口时，应向 `infra-up`、`dev-api` 与 `infra-smoke` 传入相同值，例如
 `HUBCR_REGISTRY_PORT=5001`。Distribution 仅监听 localhost 的 Debug Listener 默认单独
