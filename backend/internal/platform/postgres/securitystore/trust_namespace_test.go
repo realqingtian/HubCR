@@ -42,6 +42,8 @@ func TestTrustStoreRepairsSingleNamespaceAndReadsCurrentPolicy(t *testing.T) {
 	defer target.cleanup(t, ctx, pool)
 	other := createFixture(t, ctx, pool, now)
 	defer other.cleanup(t, ctx, pool)
+	empty := createFixture(t, ctx, pool, now)
+	defer empty.cleanup(t, ctx, pool)
 	store := New(pool.ORM())
 
 	targetKey := trustTestPublicKey(t, "target")
@@ -59,10 +61,10 @@ func TestTrustStoreRepairsSingleNamespaceAndReadsCurrentPolicy(t *testing.T) {
 		t.Fatalf("CreateTrustPolicy(other) error = %v", err)
 	}
 
-	// No policy for a never-used namespace.
-	missing, err := store.CurrentTrustPolicy(ctx, target.namespaceID+"x")
+	// No policy for a namespace that exists (it has a row) but was never given a policy.
+	missing, err := store.CurrentTrustPolicy(ctx, empty.namespaceID)
 	if !errors.Is(err, security.ErrNotFound) {
-		t.Fatalf("CurrentTrustPolicy(unknown) = %#v, %v; want ErrNotFound", missing, err)
+		t.Fatalf("CurrentTrustPolicy(no-policy) = %#v, %v; want ErrNotFound", missing, err)
 	}
 
 	// Current policy reflects the highest version.
@@ -71,19 +73,20 @@ func TestTrustStoreRepairsSingleNamespaceAndReadsCurrentPolicy(t *testing.T) {
 		t.Fatalf("CurrentTrustPolicy(target) = %#v, %v", current, err)
 	}
 
-	// Namespace-scoped repair enqueues only the target namespace artifact.
+	// Namespace-scoped repair enqueues only the target namespace's artifacts. The
+	// target fixture seeds two digests, so both are expected.
 	repaired, err := store.RepairMissingVerificationWorkflowsForNamespace(
 		ctx, target.namespaceID, 100, now.Add(500*time.Millisecond),
 	)
-	if err != nil || repaired != 1 {
-		t.Fatalf("RepairMissingVerificationWorkflowsForNamespace(target) = %d, %v; want 1", repaired, err)
+	if err != nil || repaired != 2 {
+		t.Fatalf("RepairMissingVerificationWorkflowsForNamespace(target) = %d, %v; want 2", repaired, err)
 	}
 	// The other namespace must remain unrepaired.
 	if repairedOther, err := countWorkflows(t, ctx, pool, other.repositoryID); err != nil || repairedOther != 0 {
 		t.Fatalf("other namespace workflow count = %d, %v; want 0", repairedOther, err)
 	}
-	if repairedTarget, err := countWorkflows(t, ctx, pool, target.repositoryID); err != nil || repairedTarget != 1 {
-		t.Fatalf("target namespace workflow count = %d, %v; want 1", repairedTarget, err)
+	if repairedTarget, err := countWorkflows(t, ctx, pool, target.repositoryID); err != nil || repairedTarget != 2 {
+		t.Fatalf("target namespace workflow count = %d, %v; want 2", repairedTarget, err)
 	}
 
 	// Idempotent: running again enqueues nothing new.
@@ -108,8 +111,8 @@ func TestTrustStoreRepairsSingleNamespaceAndReadsCurrentPolicy(t *testing.T) {
 	repairedForNew, err := store.RepairMissingVerificationWorkflowsForNamespace(
 		ctx, target.namespaceID, 100, now.Add(3*time.Second),
 	)
-	if err != nil || repairedForNew != 1 {
-		t.Fatalf("namespace repair after new policy = %d, %v; want 1", repairedForNew, err)
+	if err != nil || repairedForNew != 2 {
+		t.Fatalf("namespace repair after new policy = %d, %v; want 2", repairedForNew, err)
 	}
 
 	// Invalid arguments are rejected.
