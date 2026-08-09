@@ -24,6 +24,8 @@ HubCR 是具有验收证据的 Registry MVP 候选版本，不是通用生产服
 - 面向 Namespace Owner 的 Trust Policy 管理 API 与 Web UI：只追加不可变版本，支持精确
   公钥指纹与精确 OIDC issuer/subject，Namespace 成员可读，异步重新验证且保持信息性、
   绝不阻断 Pull。
+- 双语 Web UI（简体中文默认，英文）。语言解析顺序为：已保存的偏好 cookie、浏览器语言、
+  中文默认；页眉切换器可持久化选择。后端校验消息按设计保持英文。
 
 ## 运维人员必须提供
 

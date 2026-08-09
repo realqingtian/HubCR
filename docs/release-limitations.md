@@ -27,6 +27,9 @@ production service. These limitations are part of the release contract.
   versions with exact public-key fingerprints and exact OIDC issuer/subject identities,
   read access for namespace members, and asynchronous re-verification that stays
   informational and never blocks Pull.
+- Bilingual Web UI (Simplified Chinese default, English). The locale resolves by a stored
+  preference cookie, then the browser language, then the Chinese default; a header switcher
+  persists the choice. Backend validation messages remain English by design.
 
 ## Operator-supplied requirements
 

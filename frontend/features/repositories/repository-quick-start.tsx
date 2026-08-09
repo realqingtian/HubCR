@@ -1,4 +1,7 @@
+"use client";
+
 import type { RepositoryCapabilities, RepositoryVisibility } from "@/lib/api/client";
+import { useT } from "@/lib/i18n";
 
 export function RepositoryQuickStart({
   capabilities,
@@ -11,6 +14,7 @@ export function RepositoryQuickStart({
   repository: string;
   visibility: RepositoryVisibility;
 }>) {
+  const t = useT();
   const image = `hubcr.io/${namespace}/${repository}:TAG`;
   const needsLogin = (visibility === "PRIVATE" && capabilities.can_pull) || capabilities.can_push;
 
@@ -18,10 +22,10 @@ export function RepositoryQuickStart({
     <section aria-labelledby="repository-quick-start" className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm sm:p-6">
       <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
         <div>
-          <p className="text-xs font-semibold uppercase tracking-[0.18em] text-sky-700">Policy-backed commands</p>
-          <h2 className="mt-2 text-xl font-semibold text-slate-950" id="repository-quick-start">Quick start</h2>
+          <p className="text-xs font-semibold uppercase tracking-[0.18em] text-sky-700">{t("quickstart.eyebrow")}</p>
+          <h2 className="mt-2 text-xl font-semibold text-slate-950" id="repository-quick-start">{t("quickstart.title")}</h2>
           <p className="mt-2 max-w-3xl text-sm leading-6 text-slate-600">
-            Commands reflect this Repository&apos;s current Visibility and the Registry actions allowed for your account.
+            {t("quickstart.detail")}
           </p>
         </div>
         <span className="self-start rounded-full bg-slate-100 px-3 py-1.5 text-xs font-semibold text-slate-700">
@@ -30,34 +34,34 @@ export function RepositoryQuickStart({
       </div>
 
       <div className="mt-6 grid gap-4 lg:grid-cols-3">
-        <QuickStartStep title="1. Authenticate">
+        <QuickStartStep title={t("quickstart.step1")}>
           <p className="text-sm leading-6 text-slate-600">
-            A Web session is not a Registry credential. {needsLogin
-              ? "Use your HubCR username and password when Docker prompts."
-              : "This public pull does not require Registry login."}
+            {t("quickstart.sessionNote")} {needsLogin
+              ? t("quickstart.authPrivate")
+              : t("quickstart.authPublic")}
           </p>
           {needsLogin ? <Command value="docker login hubcr.io" /> : null}
         </QuickStartStep>
 
-        <QuickStartStep title="2. Pull">
+        <QuickStartStep title={t("quickstart.step2")}>
           {capabilities.can_pull ? (
             <>
-              <p className="text-sm leading-6 text-slate-600">Pull the selected Tag through the OCI data plane.</p>
+              <p className="text-sm leading-6 text-slate-600">{t("quickstart.pullDetail")}</p>
               <Command value={`docker pull ${image}`} />
             </>
           ) : (
-            <Unavailable detail="The control plane did not grant Pull for this account." title="Pull access unavailable" />
+            <Unavailable detail={t("quickstart.pullUnavailableDetail")} title={t("quickstart.pullUnavailable")} />
           )}
         </QuickStartStep>
 
-        <QuickStartStep title="3. Push">
+        <QuickStartStep title={t("quickstart.step3")}>
           {capabilities.can_push ? (
             <>
-              <p className="text-sm leading-6 text-slate-600">Tag a local image, then Push it to this exact Repository.</p>
+              <p className="text-sm leading-6 text-slate-600">{t("quickstart.pushDetail")}</p>
               <Command value={`docker tag SOURCE_IMAGE ${image}\ndocker push ${image}`} />
             </>
           ) : (
-            <Unavailable detail="Your account may discover this Repository, but policy did not grant Push." title="Push access unavailable" />
+            <Unavailable detail={t("quickstart.pushUnavailableDetail")} title={t("quickstart.pushUnavailable")} />
           )}
         </QuickStartStep>
       </div>

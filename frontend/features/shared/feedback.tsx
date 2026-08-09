@@ -1,5 +1,36 @@
 import { APIError } from "@/lib/api/client";
+import { useT } from "@/lib/i18n";
 
+// useFriendlyError returns a function that translates an error into a localized message
+// using the active locale. Components should call this hook and then invoke the returned
+// function where a human string is needed.
+export function useFriendlyError(): (error: unknown) => string {
+  const t = useT();
+  return (error: unknown): string => {
+    if (error instanceof APIError) {
+      switch (error.code) {
+        case "authentication_failed":
+          return t("shared.friendlyError.authentication_failed");
+        case "forbidden":
+          return t("shared.friendlyError.forbidden");
+        case "conflict":
+          return t("shared.friendlyError.conflict");
+        case "validation_failed":
+          // Backend field messages are English and intentionally left untranslated
+          // (see i18n design decision 2026-08-09).
+          return error.fields[0]?.message ?? t("shared.friendlyError.validation_failed");
+        default:
+          return error.requestID
+            ? `${error.message} (request ${error.requestID})`
+            : error.message;
+      }
+    }
+    return t("shared.friendlyError.default");
+  };
+}
+
+// friendlyError remains for callers that cannot use a hook; it renders the default locale.
+// Prefer useFriendlyError() inside components.
 export function friendlyError(error: unknown): string {
   if (error instanceof APIError) {
     switch (error.code) {

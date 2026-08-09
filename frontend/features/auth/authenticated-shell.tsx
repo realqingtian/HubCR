@@ -5,7 +5,9 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { createContext, useContext } from "react";
 import { APIError, getCurrentUser, logout, type LoginResponse, type User } from "@/lib/api/client";
-import { friendlyError, PanelMessage } from "@/features/shared/feedback";
+import { PanelMessage, useFriendlyError } from "@/features/shared/feedback";
+import { LanguageSwitcher } from "@/features/i18n/language-switcher";
+import { useT } from "@/lib/i18n";
 import { LoginPanel } from "./login-panel";
 import { currentUserQueryKey, installAuthenticatedUser } from "./query-cache";
 
@@ -20,6 +22,8 @@ export function useAuthenticatedUser(): User {
 }
 
 export function AuthenticatedShell({ children }: Readonly<{ children: React.ReactNode }>) {
+  const t = useT();
+  const friendlyError = useFriendlyError();
   const queryClient = useQueryClient();
   const pathname = usePathname();
   const currentUser = useQuery({
@@ -41,15 +45,15 @@ export function AuthenticatedShell({ children }: Readonly<{ children: React.Reac
 
   let content: React.ReactNode;
   if (currentUser.isPending) {
-    content = <PanelMessage title="Checking your session" detail="Connecting to the HubCR control plane." />;
+    content = <PanelMessage title={t("shell.session.checking")} detail={t("shell.session.connecting")} />;
   } else if (currentUser.isError) {
     if (currentUser.error instanceof APIError && currentUser.error.code === "authentication_failed") {
       content = <LoginPanel onSuccess={loggedIn} />;
     } else {
       content = (
         <div className="space-y-4">
-          <PanelMessage title="Control plane unavailable" detail={friendlyError(currentUser.error)} tone="error" />
-          <button className="rounded-lg border border-slate-300 bg-white px-4 py-2.5 text-sm font-semibold text-slate-700 hover:bg-slate-50 focus:outline-none focus:ring-4 focus:ring-slate-100" onClick={() => void currentUser.refetch()} type="button">Try again</button>
+          <PanelMessage title={t("shell.unavailable.title")} detail={friendlyError(currentUser.error)} tone="error" />
+          <button className="rounded-lg border border-slate-300 bg-white px-4 py-2.5 text-sm font-semibold text-slate-700 hover:bg-slate-50 focus:outline-none focus:ring-4 focus:ring-slate-100" onClick={() => void currentUser.refetch()} type="button">{t("shell.retry")}</button>
         </div>
       );
     }
@@ -58,14 +62,14 @@ export function AuthenticatedShell({ children }: Readonly<{ children: React.Reac
     content = (
       <AuthenticatedUserContext.Provider value={user}>
         <div className="mb-7 flex flex-col gap-4 rounded-2xl border border-slate-200 bg-white p-4 shadow-sm sm:flex-row sm:items-center sm:justify-between">
-          <nav aria-label="Workspace" className="flex flex-wrap items-center gap-2 text-sm font-medium">
-            <WorkspaceLink active={pathname === "/"} href="/">Overview</WorkspaceLink>
-            <WorkspaceLink active={pathname.startsWith(`/namespaces/${user.personal_namespace}`)} href={`/namespaces/${user.personal_namespace}`}>Personal namespace</WorkspaceLink>
-            <WorkspaceLink active={false} href="/#organizations">Organizations</WorkspaceLink>
+          <nav aria-label={t("shell.nav.workspace")} className="flex flex-wrap items-center gap-2 text-sm font-medium">
+            <WorkspaceLink active={pathname === "/"} href="/">{t("shell.nav.overview")}</WorkspaceLink>
+            <WorkspaceLink active={pathname.startsWith(`/namespaces/${user.personal_namespace}`)} href={`/namespaces/${user.personal_namespace}`}>{t("shell.nav.personalNamespace")}</WorkspaceLink>
+            <WorkspaceLink active={false} href="/#organizations">{t("shell.nav.organizations")}</WorkspaceLink>
           </nav>
           <div className="flex flex-wrap items-center gap-3">
-            <p className="text-sm text-slate-600">Signed in as <span className="font-semibold text-slate-950">{user.username}</span></p>
-            <button className="rounded-lg border border-slate-300 px-3 py-2 text-sm font-semibold text-slate-700 hover:bg-slate-50 focus:outline-none focus:ring-4 focus:ring-slate-100 disabled:opacity-60" disabled={logoutMutation.isPending} onClick={() => logoutMutation.mutate()} type="button">{logoutMutation.isPending ? "Signing out…" : "Sign out"}</button>
+            <p className="text-sm text-slate-600">{t("shell.signedInAs", { username: user.username })}</p>
+            <button className="rounded-lg border border-slate-300 px-3 py-2 text-sm font-semibold text-slate-700 hover:bg-slate-50 focus:outline-none focus:ring-4 focus:ring-slate-100 disabled:opacity-60" disabled={logoutMutation.isPending} onClick={() => logoutMutation.mutate()} type="button">{logoutMutation.isPending ? t("shell.signOut.pending") : t("shell.signOut.default")}</button>
           </div>
           {logoutMutation.isError ? <p className="text-sm text-rose-700" role="alert">{friendlyError(logoutMutation.error)}</p> : null}
         </div>
@@ -80,15 +84,18 @@ export function AuthenticatedShell({ children }: Readonly<{ children: React.Reac
         <Link className="flex items-center gap-3 rounded-lg focus:outline-none focus:ring-4 focus:ring-sky-100" href="/">
           <span className="grid size-9 place-items-center rounded-xl bg-slate-950 font-mono text-sm font-bold text-white">H</span>
           <span>
-            <span className="block text-lg font-semibold tracking-tight text-slate-950">HubCR</span>
-            <span className="block text-xs text-slate-500">Container Registry</span>
+            <span className="block text-lg font-semibold tracking-tight text-slate-950">{t("shell.brand")}</span>
+            <span className="block text-xs text-slate-500">{t("shell.brandTag")}</span>
           </span>
         </Link>
-        <span className="rounded-full border border-sky-200 bg-sky-50 px-3 py-1 text-xs font-semibold text-sky-700">Supply-chain security · M4</span>
+        <div className="flex flex-wrap items-center gap-3">
+          <span className="rounded-full border border-sky-200 bg-sky-50 px-3 py-1 text-xs font-semibold text-sky-700">{t("shell.brandMeta")}</span>
+          <LanguageSwitcher />
+        </div>
       </header>
       {content}
       <footer className="mt-10 border-t border-slate-200 py-6 text-xs leading-5 text-slate-500">
-        HubCR business control plane · OCI content transfer is provided by CNCF Distribution.
+        {t("shell.footer")}
       </footer>
     </main>
   );
