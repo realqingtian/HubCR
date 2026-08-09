@@ -3,6 +3,7 @@
 import { useQuery } from "@tanstack/react-query";
 import Link from "next/link";
 import { friendlyError, PanelMessage } from "@/features/shared/feedback";
+import { TrustPolicyPanel } from "@/features/trust-policy/trust-policy-panel";
 import { listRepositories } from "@/lib/api/client";
 
 export function NamespacePage({ namespace }: Readonly<{ namespace: string }>) {
@@ -63,6 +64,8 @@ export function NamespacePage({ namespace }: Readonly<{ namespace: string }>) {
           {repositories.data?.meta.next_cursor ? <p className="text-xs text-slate-500">Showing the first 100 authorized repositories.</p> : null}
         </div>
       </section>
+
+      <TrustPolicyPanel namespace={namespace} />
     </div>
   );
 }

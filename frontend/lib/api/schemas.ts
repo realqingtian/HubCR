@@ -265,6 +265,36 @@ export const artifactSecuritySchema = z.object({
   signature: signatureResultSchema,
 });
 
+export const trustPublicKeySchema = z.object({
+  name: z.string().min(1).max(128),
+  fingerprint: z.string().regex(/^sha256:[0-9a-f]{64}$/),
+  public_key_pem: z.string().min(1).max(16834),
+});
+
+export const trustKeylessIdentitySchema = z.object({
+  issuer: z.url().startsWith("https://"),
+  subject: z.string().min(1).max(2048),
+});
+
+export const trustPolicySchema = z.object({
+  id: idSchema,
+  version: z.number().int().min(1),
+  public_keys: z.array(trustPublicKeySchema),
+  keyless_identities: z.array(trustKeylessIdentitySchema),
+  created_by_user_id: idSchema,
+  created_at: timestampSchema,
+});
+
+export const createTrustPolicyRequestSchema = z
+  .object({
+    public_keys: z.array(trustPublicKeySchema).max(128).optional(),
+    keyless_identities: z.array(trustKeylessIdentitySchema).max(128).optional(),
+  })
+  .refine(
+    (value) => (value.public_keys?.length ?? 0) + (value.keyless_identities?.length ?? 0) >= 1,
+    { message: "at least one trust subject is required" },
+  );
+
 export type HealthResponse = z.infer<typeof healthResponseSchema>;
 export type ErrorEnvelope = z.infer<typeof errorEnvelopeSchema>;
 export type FieldError = z.infer<typeof fieldErrorSchema>;
@@ -289,3 +319,7 @@ export type ArtifactSecurity = z.infer<typeof artifactSecuritySchema>;
 export type SecurityResult = z.infer<typeof securityResultSchema>;
 export type SignatureEvidence = z.infer<typeof signatureEvidenceSchema>;
 export type SignatureResult = z.infer<typeof signatureResultSchema>;
+export type TrustPublicKey = z.infer<typeof trustPublicKeySchema>;
+export type TrustKeylessIdentity = z.infer<typeof trustKeylessIdentitySchema>;
+export type TrustPolicy = z.infer<typeof trustPolicySchema>;
+export type CreateTrustPolicyRequest = z.infer<typeof createTrustPolicyRequestSchema>;

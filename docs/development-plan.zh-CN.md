@@ -4,7 +4,8 @@
 
 - 状态：持续维护中的有效计划
 - 计划开始：2026-08-01
-- 当前阶段：里程碑 4 已退出；M4-01 至 M4-05 均已完成，里程碑 5 能力需要分别确定优先级并完成策略决策
+- 当前阶段：里程碑 4 已退出；M4-01 至 M4-05 均已完成。M5-01 Trust Policy 管理已实现；
+  其他里程碑 5 能力需要分别确定优先级并完成策略决策。
 - 需求基线：[HubCR 产品需求](requirements.zh-CN.md)
 
 本计划将产品基线转化为有顺序、可测试的工作项。它是一份交付管理文档：完成工作后
@@ -502,10 +503,21 @@ Discovery 授权；Web 通过 TanStack Query 使用 Zod 校验后的响应，不
 每项能力都需要独立的策略决策、威胁审查、迁移计划、运维流程和故障恢复测试。本
 里程碑并不是一个单独版本。
 
+### M5-01 Trust Policy 管理 — 最小 MVP
+
+产品负责人于 2026-08-09 批准，设计见
+[M5-01 设计](m5-01-trust-policy-management.zh-CN.md)。在 D-008 信任模型之上增加经授权的
+产品管理入口，不改变 D-008 或 D-007。
+
+| 任务 | 状态 | 结果 |
+| --- | --- | --- |
+| M5-01 | `DONE` | Namespace 层级 Trust Policy 管理：`ManageTrustPolicy`（仅 owner）与复用 `ViewOrganization`（成员可读）capability；经授权的 `CreatePolicy`，含即时 Namespace 作用域重新验证；`GET`/`POST /api/v1/namespaces/{namespace}/trust-policy`；查看当前 + 创建版本的 Web UI；OpenAPI 与双语文档 |
+
+验收证据：授权、Namespace 作用域 repair 与 HTTP handler 单元测试通过；管理路径强制仅 owner 创建、成员可读，非成员得到 `404`（不泄露存在性）；前端 schema/client 测试、TypeScript、ESLint 与 Next.js 生产构建通过；`make check` 在沙箱 Go cache 变通下通过。Namespace 作用域 repair 的 PostgreSQL 集成测试已定义，但 `HUBCR_TEST_DATABASE_URL` 未设置时会跳过（运行运行时验收脚本可覆盖）。重新验证保持信息性，不阻断 Pull。
+
 ## 11. 立即执行队列
 
-里程碑 4 已完成。开始实现前，应先选择并批准一项独立范围的里程碑 5 能力。D-007
-继续要求 Scan 与 Trust 结果只展示信息；Pull Enforcement 需要另行完成产品决策。
+里程碑 4 已完成。M5-01 Trust Policy 管理已实现；实现下一个独立范围的里程碑 5 能力前需先选择并批准。D-007 继续要求 Scan 与 Trust 结果只展示信息；Pull Enforcement 需要另行完成产品决策。
 
 Commit 应保持足够小，使一个工作包及其测试可一起审查。
 

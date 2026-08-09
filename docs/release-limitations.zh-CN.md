@@ -21,6 +21,9 @@ HubCR 是具有验收证据的 Registry MVP 候选版本，不是通用生产服
   以及真实漏洞/干净 Fixture 证据。
 - 异步 Cosign 3.0.6 签名发现、密码学验证与版本化 Namespace 信任评估，包括经授权
   API 与 Web 对未签名、无效、未验证、可信、不可信、不可用和过期状态的如实展示。
+- 面向 Namespace Owner 的 Trust Policy 管理 API 与 Web UI：只追加不可变版本，支持精确
+  公钥指纹与精确 OIDC issuer/subject，Namespace 成员可读，异步重新验证且保持信息性、
+  绝不阻断 Pull。
 
 ## 运维人员必须提供
 
@@ -38,11 +41,13 @@ HubCR 是具有验收证据的 Registry MVP 候选版本，不是通用生产服
 - 自动备份计划、固定 RPO/RTO、跨区域灾难恢复或自动数据库降级。
 - Repository 删除、保留、Tag 历史、Distribution 垃圾回收、配额、Audit 导出、Robot
   Account、Access Token、Webhook、复制或代理缓存。
-- 产品化 Trust Policy 管理 API/UI、SBOM 下载，或基于 Scan/Trust 的 Pull 阻断。
+- SBOM 下载，或基于 Scan/Trust 的 Pull 阻断。Trust Policy 管理对 Namespace Owner 受支持
+  （M5-01）；编辑或删除历史版本、Repository 级策略与通配信任主体仍不受支持。
 - 已记录 Apple Silicon 与 Docker 版本之外的 Host/Client 兼容性；Linux 与 Windows
   部署宿主需要独立证据。
 
 Worker 已有持久化 Trivy 扫描/SBOM 与 Cosign/Trust Handler，但结果只展示信息，不影响
-Push 或 Pull。Trust Policy Seed 仍是隔离验收 Helper，不是受支持的产品管理 Endpoint。
+Push 或 Pull。Trust Policy 由 Namespace Owner 通过产品 API/UI 管理；测试 Seed Helper 仅
+用于验收。
 Redis 不保存权威业务状态。认证 Limiter 仍为进程内状态。完整安全模型与残余风险记录在
 [Registry MVP 威胁模型](security-threat-model.zh-CN.md)。

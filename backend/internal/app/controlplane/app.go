@@ -28,6 +28,7 @@ import (
 	"hubcr.io/hubcr/internal/platform/httpapi/registryhandler"
 	"hubcr.io/hubcr/internal/platform/httpapi/repositoryhandler"
 	"hubcr.io/hubcr/internal/platform/httpapi/securityhandler"
+	"hubcr.io/hubcr/internal/platform/httpapi/trustpolicyhandler"
 	"hubcr.io/hubcr/internal/platform/httpserver"
 	"hubcr.io/hubcr/internal/platform/observability"
 	"hubcr.io/hubcr/internal/platform/postgres"
@@ -126,6 +127,19 @@ func New(ctx context.Context, cfg config.API, logger *slog.Logger) (*App, error)
 		database.Close()
 		return nil, fmt.Errorf("initialize trust workflow service: %w", err)
 	}
+	managingTrustService, err := security.NewManagingTrustService(
+		securityStore, time.Now, policy, trustpolicyhandler.ResolveAccess(repositoryService),
+	)
+	if err != nil {
+		database.Close()
+		return nil, fmt.Errorf("initialize trust management service: %w", err)
+	}
+	trustPolicyHandler, err := trustpolicyhandler.New(authService, repositoryService, managingTrustService)
+	if err != nil {
+		database.Close()
+		return nil, fmt.Errorf("initialize trust policy HTTP handler: %w", err)
+	}
+	trustpolicyhandler.RegisterRoutes(router, trustPolicyHandler)
 	securityHandler, err := securityhandler.New(authService, repositoryService, securityService)
 	if err != nil {
 		database.Close()

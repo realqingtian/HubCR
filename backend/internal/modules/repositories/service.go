@@ -248,6 +248,16 @@ func (s *Service) Update(
 	return updated, nil
 }
 
+// ResolveNamespaceAccess resolves the actor's relationship to a namespace by name,
+// applying the same normalization and lookup as the repository paths. It is the canonical
+// entry point for callers outside the repository module (for example, trust-policy
+// management) that must enforce namespace-level authorization.
+func (s *Service) ResolveNamespaceAccess(
+	ctx context.Context, namespaceName, actorUserID string,
+) (NamespaceAccess, error) {
+	return s.access(ctx, namespaceName, actorUserID)
+}
+
 func (s *Service) access(ctx context.Context, namespaceName, actorUserID string) (NamespaceAccess, error) {
 	name, err := namespaces.NormalizeName(namespaceName)
 	if err != nil {

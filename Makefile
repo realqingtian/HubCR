@@ -1,4 +1,4 @@
-.PHONY: dev-api dev-worker dev-web db-migrate registry-dev-keys infra-config infra-up infra-down infra-status infra-smoke prod-config prod-build prod-migrate prod-up prod-maintenance-stop prod-backup prod-restore prod-down prod-status test test-integration test-m1-e2e test-m2-registry-e2e test-m3-artifact-e2e test-m3-backup-restore-e2e test-m4-security-e2e check-docs check-secrets check-security-config check-workflows check
+.PHONY: dev-api dev-worker dev-web db-migrate registry-dev-keys infra-config infra-up infra-down infra-status infra-smoke prod-config prod-build prod-migrate prod-up prod-maintenance-stop prod-backup prod-restore prod-down prod-status test test-integration test-m1-e2e test-m2-registry-e2e test-m3-artifact-e2e test-m3-backup-restore-e2e test-m4-security-e2e test-m5-01-trust-policy-e2e check-docs check-secrets check-security-config check-workflows check
 
 HUBCR_COMPOSE_FILE ?= deployments/compose/compose.yaml
 HUBCR_ENV_FILE ?= .env
@@ -124,6 +124,9 @@ test-m3-backup-restore-e2e:
 
 test-m4-security-e2e:
 	sh scripts/m4-security-e2e.sh
+
+test-m5-01-trust-policy-e2e:
+	sh scripts/m5-01-trust-policy-e2e.sh
 
 check-docs:
 	python3 scripts/check-docs.py

@@ -4,7 +4,9 @@
 
 - Status: active living plan
 - Plan start: 2026-08-01
-- Current stage: Milestone 4 exited; M4-01 through M4-05 are done, and Milestone 5 capabilities require separate prioritization and policy decisions
+- Current stage: Milestone 4 exited; M4-01 through M4-05 are done. M5-01 Trust Policy
+  management is implemented; other Milestone 5 capabilities require separate
+  prioritization and policy decisions.
 - Requirements: [HubCR product requirements](requirements.md)
 
 This plan converts the product baseline into ordered, testable work. It is a delivery
@@ -586,11 +588,30 @@ Prioritize these independently according to real operator needs:
 Each capability needs a separate policy decision, threat review, migration plan,
 operator workflow, and failure-recovery test. This milestone is not a single release.
 
+### M5-01 Trust Policy management — minimal MVP
+
+Approved by the product owner on 2026-08-09 and designed in
+[M5-01 design](m5-01-trust-policy-management.md). Adds the authorized product management
+surface on top of the D-008 trust model; it does not change D-008 or D-007.
+
+| Task | Status | Result |
+| --- | --- | --- |
+| M5-01 | `DONE` | Namespace-level trust-policy management: `ManageTrustPolicy` (owner-only) and reused `ViewOrganization` (member read) capabilities; authorized `CreatePolicy` with eager namespace-scoped re-verification; `GET`/`POST /api/v1/namespaces/{namespace}/trust-policy`; view-current + create-version Web UI; OpenAPI and bilingual docs |
+
+Acceptance evidence: authorization, namespace-scoped repair, and HTTP handler unit tests
+pass; the management paths enforce owner-only create and member read with `404` for
+non-members (no existence leak); frontend schema/client tests, TypeScript, ESLint, and the
+Next.js production build pass; `make check` passes with the sandbox Go cache workaround.
+The PostgreSQL integration test for namespace-scoped repair is defined but skipped when
+`HUBCR_TEST_DATABASE_URL` is unset (run the runtime acceptance script to exercise it).
+Re-verification remains informational and does not block Pull.
+
 ## 11. Immediate execution queue
 
-Milestone 4 is complete. Select and approve one independently scoped Milestone 5
-capability before implementation. D-007 continues to keep scan and trust results
-informational; Pull enforcement requires a separate product decision.
+Milestone 4 is complete. M5-01 Trust Policy management is implemented; select and approve
+the next independently scoped Milestone 5 capability before implementing it. D-007
+continues to keep scan and trust results informational; Pull enforcement requires a
+separate product decision.
 
 Keep commits small enough that one work package and its tests can be reviewed together.
 

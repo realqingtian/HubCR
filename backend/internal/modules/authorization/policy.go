@@ -14,6 +14,7 @@ const (
 	EditRepositoryDescription  Capability = "EDIT_REPOSITORY_DESCRIPTION"
 	PushRepositories           Capability = "PUSH_REPOSITORIES"
 	PullPrivateRepositories    Capability = "PULL_PRIVATE_REPOSITORIES"
+	ManageTrustPolicy          Capability = "MANAGE_TRUST_POLICY"
 )
 
 type Policy struct{}
@@ -31,7 +32,7 @@ func (Policy) AllowsPersonalNamespace(isOwner bool, capability Capability) bool 
 	}
 	switch capability {
 	case CreateRepositories, ChangeRepositoryVisibility, EditRepositoryDescription,
-		PushRepositories, PullPrivateRepositories:
+		PushRepositories, PullPrivateRepositories, ManageTrustPolicy:
 		return true
 	default:
 		return false
@@ -99,4 +100,5 @@ var organizationCapabilities = map[Capability]map[organizations.Role]bool{
 		organizations.RoleOwner: true, organizations.RoleAdmin: true,
 		organizations.RoleWriter: true, organizations.RoleReader: true,
 	},
+	ManageTrustPolicy: {organizations.RoleOwner: true},
 }

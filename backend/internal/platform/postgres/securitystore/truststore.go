@@ -2,6 +2,7 @@ package securitystore
 
 import (
 	"context"
+	"errors"
 	"time"
 
 	"gorm.io/gorm"
@@ -217,6 +218,64 @@ func (s *Store) RepairMissingVerificationWorkflows(
 	return repaired, nil
 }
 
+// RepairMissingVerificationWorkflowsForNamespace is the namespace-scoped counterpart
+// of RepairMissingVerificationWorkflows. It selects only artifacts whose repository
+// belongs to the named namespace, so a new policy version can kick off re-verification
+// eagerly instead of waiting for the global periodic repair tick. It is idempotent:
+// EnsureCurrentVerification dedups on (repository_id, digest, policy_id) and the job
+// queue dedups on the policy-scoped intent key, so concurrent runs with the periodic
+// loop are safe.
+func (s *Store) RepairMissingVerificationWorkflowsForNamespace(
+	ctx context.Context,
+	namespaceID string,
+	limit int,
+	now time.Time,
+) (int, error) {
+	if namespaceID == "" || limit < 1 || limit > security.MaxRepairBatch || now.IsZero() {
+		return 0, security.ErrInvalid
+	}
+	var targets []signatureWorkflowReadRecord
+	if err := s.database.WithContext(ctx).Raw(
+		`WITH current_policy AS (
+		   SELECT id FROM trust_policies
+		   WHERE namespace_id = ? ORDER BY version DESC LIMIT 1
+		 )
+		 SELECT a.repository_id, a.digest, n.id AS namespace_id,
+		        n.name AS namespace, r.name AS repository
+		 FROM artifacts AS a
+		 JOIN repositories AS r ON r.id = a.repository_id
+		 JOIN namespaces AS n ON n.id = r.namespace_id
+		 CROSS JOIN current_policy AS policy
+		 WHERE n.id = ?
+		   AND NOT EXISTS (
+		     SELECT 1 FROM signature_workflows AS workflow
+		     WHERE workflow.repository_id = a.repository_id
+		       AND workflow.digest = a.digest
+		       AND workflow.policy_id = policy.id
+		   )
+		 ORDER BY a.discovered_at, a.repository_id, a.digest
+		 LIMIT ?`,
+		namespaceID, namespaceID, limit,
+	).Scan(&targets).Error; err != nil {
+		return 0, classify("list missing signature workflows for namespace", err)
+	}
+	repaired := 0
+	for _, record := range targets {
+		target, err := security.NewTarget(record.RepositoryID, record.Namespace, record.Repository, record.Digest)
+		if err != nil {
+			return repaired, classify("decode signature repair target", err)
+		}
+		_, created, err := s.EnsureCurrentVerification(ctx, target, now)
+		if err != nil {
+			return repaired, err
+		}
+		if created {
+			repaired++
+		}
+	}
+	return repaired, nil
+}
+
 func (s *Store) ResolveVerificationJob(
 	ctx context.Context,
 	job jobs.Job,
@@ -325,6 +384,22 @@ func currentPolicyByNamespace(database *gorm.DB, namespaceID string) (security.T
 		return security.TrustPolicy{}, err
 	}
 	return policyFromRecord(database, record)
+}
+
+// CurrentTrustPolicy returns the highest-version trust policy for the namespace, mapping
+// the absence of any policy to security.ErrNotFound.
+func (s *Store) CurrentTrustPolicy(ctx context.Context, namespaceID string) (security.TrustPolicy, error) {
+	if namespaceID == "" {
+		return security.TrustPolicy{}, security.ErrInvalid
+	}
+	policy, err := currentPolicyByNamespace(s.database.WithContext(ctx), namespaceID)
+	if err != nil {
+		if errors.Is(err, gorm.ErrRecordNotFound) {
+			return security.TrustPolicy{}, security.ErrNotFound
+		}
+		return security.TrustPolicy{}, classify("read current trust policy", err)
+	}
+	return policy, nil
 }
 
 func policyByID(database *gorm.DB, policyID string) (security.TrustPolicy, error) {

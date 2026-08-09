@@ -190,6 +190,27 @@ Reason、精确公钥 Fingerprint 或 Keyless Issuer/Subject。Completed 且 Evi
 
 该 Endpoint 只展示信息，不阻断 Push/Pull。
 
+## Trust Policy 管理
+
+`GET /api/v1/namespaces/{namespace}/trust-policy` 返回该 namespace 的当前（最高版本）
+信任策略，无则 `404 not_found`。读取权限使用 `VIEW_ORGANIZATION` capability：组织
+owner、admin、writer、reader，以及个人 namespace owner 可读。与 namespace 无成员关系的
+调用方得到 `404 not_found` 而非 `403`，因此不泄露 namespace 的存在性。
+
+`POST /api/v1/namespaces/{namespace}/trust-policy` 创建新的只追加策略版本。仅限 owner：
+`MANAGE_TRUST_POLICY` capability 仅授予个人 namespace owner 与组织 owner 角色。请求体包含
+一个或多个信任主体，数量不超过配置上限：
+
+- `public_keys`：每项含 `name`、规范化 `public_key_pem`（`PUBLIC KEY` PEM），以及必须与所
+  提供公钥匹配的 `fingerprint`（DER 编码公钥的 `sha256:`）。指纹不匹配会被作为校验错误
+  拒绝。
+- `keyless_identities`：每项含精确 OIDC `issuer` 与 `subject`。不接受通配符。
+
+版本不可变：无更新或删除。成功时响应为 `201 created`，返回新策略（`id`、`version`、
+`public_keys`、`keyless_identities`、`created_by_user_id`、`created_at`）。创建版本会即时
+为该 namespace 的 artifact 排队重新验证；响应不报告该计数（异步进度可通过安全 Endpoint
+及其 `STALE` 状态按 artifact 观察）。重新验证保持信息性，绝不阻断 Pull。
+
 ## OpenAPI 所有权
 
 [`openapi.yaml`](openapi.yaml) 是人工维护并经过审查的 OpenAPI 3.1 契约。公共 API

@@ -216,6 +216,32 @@ policy version and is not a current trust conclusion.
 
 This endpoint exposes informational state only; it does not block Push or Pull.
 
+## Trust policy management
+
+`GET /api/v1/namespaces/{namespace}/trust-policy` returns the current (highest-version)
+trust policy for the namespace, or `404 not_found` when none exists. Read access uses the
+`VIEW_ORGANIZATION` capability: organization owners, admins, writers, and readers, plus
+the personal-namespace owner, may read. A caller with no membership relationship to the
+namespace gets `404 not_found` rather than `403`, so namespace existence is not leaked.
+
+`POST /api/v1/namespaces/{namespace}/trust-policy` creates a new append-only policy
+version. It is owner-only: the `MANAGE_TRUST_POLICY` capability is granted to the
+personal-namespace owner and the organization owner role only. The request body contains
+one or more trust subjects, up to the configured maximum:
+
+- `public_keys`: each with `name`, canonical `public_key_pem` (`PUBLIC KEY` PEM), and a
+  `fingerprint` that must match the supplied key (`sha256:` of the DER-encoded public
+  key). A mismatched fingerprint is rejected as a validation error.
+- `keyless_identities`: each with an exact OIDC `issuer` and `subject`. Wildcards are not
+  accepted.
+
+Versions are immutable: there is no update or delete. On success the response is
+`201 created` with the new policy (`id`, `version`, `public_keys`,
+`keyless_identities`, `created_by_user_id`, `created_at`). Creating a version eagerly
+queues re-verification for the namespace's artifacts; the response does not report that
+count (the asynchronous progress is observable per artifact via the security endpoint and
+its `STALE` state). Re-verification remains informational and never blocks Pull.
+
 ## OpenAPI ownership
 
 [`openapi.yaml`](openapi.yaml) is the manually maintained, reviewed OpenAPI 3.1

@@ -14,10 +14,12 @@ import {
   repositorySchema,
   tagListSchema,
   tagSchema,
+  trustPolicySchema,
   userSchema,
   type Artifact,
   type ArtifactSecurity,
   type ArtifactList,
+  type CreateTrustPolicyRequest,
   type FieldError,
   type HealthResponse,
   type LoginResponse,
@@ -31,6 +33,7 @@ import {
   type RepositoryVisibility,
   type Tag,
   type TagList,
+  type TrustPolicy,
   type User,
 } from "./schemas";
 
@@ -242,12 +245,30 @@ export async function updateRepository(
   );
 }
 
+export async function getCurrentTrustPolicy(namespace: string): Promise<TrustPolicy> {
+  return request(
+    `/api/v1/namespaces/${encodeURIComponent(namespace)}/trust-policy`,
+    trustPolicySchema,
+  );
+}
+
+export async function createTrustPolicyVersion(
+  namespace: string,
+  input: CreateTrustPolicyRequest,
+): Promise<TrustPolicy> {
+  return request(`/api/v1/namespaces/${encodeURIComponent(namespace)}/trust-policy`, trustPolicySchema, {
+    method: "POST",
+    body: JSON.stringify(input),
+  });
+}
+
 export type {
   Artifact,
   ArtifactSecurity,
   SecurityResult,
   SignatureEvidence,
   ArtifactList,
+  CreateTrustPolicyRequest,
   LoginResponse,
   ManifestDescriptor,
   Organization,
@@ -260,5 +281,8 @@ export type {
   RepositoryVisibility,
   Tag,
   TagList,
+  TrustKeylessIdentity,
+  TrustPolicy,
+  TrustPublicKey,
   User,
 } from "./schemas";

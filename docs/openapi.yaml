@@ -475,6 +475,49 @@ paths:
           $ref: "#/components/responses/AuthenticationFailed"
         "404":
           $ref: "#/components/responses/NotFound"
+  /api/v1/namespaces/{namespace}/trust-policy:
+    parameters:
+      - $ref: "#/components/parameters/NamespaceName"
+    get:
+      operationId: getCurrentTrustPolicy
+      summary: Read the current (highest-version) trust policy for a namespace
+      security:
+        - sessionCookie: []
+      responses:
+        "200":
+          description: The current namespace trust policy.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/TrustPolicy"
+        "401":
+          $ref: "#/components/responses/AuthenticationFailed"
+        "404":
+          $ref: "#/components/responses/NotFound"
+    post:
+      operationId: createTrustPolicyVersion
+      summary: Create a new append-only trust-policy version (namespace owner only)
+      security:
+        - sessionCookie: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CreateTrustPolicyRequest"
+      responses:
+        "201":
+          description: The new immutable policy version was created and re-verification was queued.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/TrustPolicy"
+        "401":
+          $ref: "#/components/responses/AuthenticationFailed"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "422":
+          $ref: "#/components/responses/ValidationFailed"
 components:
   securitySchemes:
     sessionCookie:
@@ -1228,6 +1271,89 @@ components:
           type: string
           minLength: 1
           maxLength: 128
+    TrustPolicy:
+      type: object
+      additionalProperties: false
+      required:
+        - id
+        - version
+        - public_keys
+        - keyless_identities
+        - created_by_user_id
+        - created_at
+      properties:
+        id:
+          type: string
+          minLength: 1
+          maxLength: 128
+        version:
+          type: integer
+          format: int64
+          minimum: 1
+        public_keys:
+          type: array
+          items:
+            $ref: "#/components/schemas/TrustPublicKey"
+        keyless_identities:
+          type: array
+          items:
+            $ref: "#/components/schemas/TrustKeylessIdentity"
+        created_by_user_id:
+          type: string
+          minLength: 1
+          maxLength: 128
+        created_at:
+          type: string
+          format: date-time
+    TrustPublicKey:
+      type: object
+      additionalProperties: false
+      required:
+        - name
+        - fingerprint
+        - public_key_pem
+      properties:
+        name:
+          type: string
+          minLength: 1
+          maxLength: 128
+        fingerprint:
+          type: string
+          pattern: "^sha256:[0-9a-f]{64}$"
+        public_key_pem:
+          type: string
+          minLength: 1
+          maxLength: 16834
+    TrustKeylessIdentity:
+      type: object
+      additionalProperties: false
+      required:
+        - issuer
+        - subject
+      properties:
+        issuer:
+          type: string
+          minLength: 1
+          format: uri
+        subject:
+          type: string
+          minLength: 1
+          maxLength: 2048
+    CreateTrustPolicyRequest:
+      type: object
+      additionalProperties: false
+      properties:
+        public_keys:
+          type: array
+          maxItems: 128
+          items:
+            $ref: "#/components/schemas/TrustPublicKey"
+        keyless_identities:
+          type: array
+          maxItems: 128
+          items:
+            $ref: "#/components/schemas/TrustKeylessIdentity"
+      minProperties: 1
   responses:
     InvalidRequest:
       description: A path or pagination value is malformed.

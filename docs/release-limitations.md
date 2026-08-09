@@ -23,6 +23,10 @@ production service. These limitations are part of the release contract.
 - Asynchronous Cosign 3.0.6 signature discovery, cryptographic verification, and
   versioned namespace trust evaluation, including authorized API and Web presentation
   of unsigned, invalid, unverified, trusted, untrusted, unavailable, and stale states.
+- Namespace trust-policy management API and Web UI for owners: append-only immutable
+  versions with exact public-key fingerprints and exact OIDC issuer/subject identities,
+  read access for namespace members, and asynchronous re-verification that stays
+  informational and never blocks Pull.
 
 ## Operator-supplied requirements
 
@@ -45,14 +49,16 @@ production service. These limitations are part of the release contract.
 - Repository deletion, retention, Tag history, Distribution garbage collection,
   quotas, audit export, robot accounts, access tokens, webhooks, replication, or proxy
   caching.
-- Product trust-policy management API/UI, SBOM download, or scan/trust-based Pull
-  blocking.
+- SBOM download, or scan/trust-based Pull blocking. Trust-policy management is supported
+  for namespace owners (M5-01); editing or deleting historical versions, repository-level
+  policies, and wildcard trust subjects remain unsupported.
 - Host/client compatibility beyond the recorded Apple Silicon and Docker versions;
   Linux and Windows deployment hosts require separate evidence.
 
 The worker has durable Trivy scan/SBOM and Cosign/trust handlers, but their results are
-informational and do not affect Push or Pull. Trust-policy seeding remains an isolated
-acceptance helper, not a supported product management endpoint. Redis does not hold
+informational and do not affect Push or Pull. Trust policies are managed through the
+product API/UI by namespace owners; the test seed helper remains for acceptance only.
+Redis does not hold
 authoritative business state. The authentication limiter is process-local. The
 full security model and residual risks are recorded in the
 [Registry MVP threat model](security-threat-model.md).

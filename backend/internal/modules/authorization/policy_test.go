@@ -25,6 +25,7 @@ func TestApprovedOrganizationCapabilityMatrix(t *testing.T) {
 		{EditRepositoryDescription, allow(organizations.RoleOwner, organizations.RoleAdmin, organizations.RoleWriter)},
 		{PushRepositories, allow(organizations.RoleOwner, organizations.RoleAdmin, organizations.RoleWriter)},
 		{PullPrivateRepositories, allow(roles...)},
+		{ManageTrustPolicy, allow(organizations.RoleOwner)},
 	}
 	for _, test := range tests {
 		for _, role := range roles {
@@ -48,7 +49,7 @@ func TestPersonalNamespaceOwnerCapabilities(t *testing.T) {
 	policy := NewPolicy()
 	for _, capability := range []Capability{
 		CreateRepositories, ChangeRepositoryVisibility, EditRepositoryDescription,
-		PushRepositories, PullPrivateRepositories,
+		PushRepositories, PullPrivateRepositories, ManageTrustPolicy,
 	} {
 		if !policy.AllowsPersonalNamespace(true, capability) {
 			t.Fatalf("personal owner denied %s", capability)

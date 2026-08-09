@@ -30,6 +30,7 @@ var (
 	ErrInvalid       = errors.New("invalid security workflow")
 	ErrNotFound      = errors.New("security workflow not found")
 	ErrConflict      = errors.New("security workflow conflicts with persisted state")
+	ErrForbidden     = errors.New("security action is forbidden")
 	ErrUnavailable   = errors.New("security workflow persistence is unavailable")
 	ErrToolFailure   = errors.New("security tool execution failed")
 	ErrInvalidOutput = errors.New("security tool returned invalid output")
