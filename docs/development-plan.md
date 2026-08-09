@@ -601,10 +601,12 @@ surface on top of the D-008 trust model; it does not change D-008 or D-007.
 Acceptance evidence: authorization, namespace-scoped repair, and HTTP handler unit tests
 pass; the management paths enforce owner-only create and member read with `404` for
 non-members (no existence leak); frontend schema/client tests, TypeScript, ESLint, and the
-Next.js production build pass; `make check` passes with the sandbox Go cache workaround.
-The PostgreSQL integration test for namespace-scoped repair is defined but skipped when
-`HUBCR_TEST_DATABASE_URL` is unset (run the runtime acceptance script to exercise it).
-Re-verification remains informational and does not block Pull.
+Next.js production build pass; `make check` passes with the sandbox Go cache workaround;
+`make test-m5-01-trust-policy-e2e` passes the Docker full-stack runtime acceptance (login,
+POST policy v1 + v2, read-back, eager re-verification, member-read/non-owner `404` auth
+matrix, Pull still works after policy creation); `make test-integration` passes all 17
+packages including the namespace-scoped repair test. Re-verification remains informational
+and does not block Pull.
 
 ## 11. Immediate execution queue
 

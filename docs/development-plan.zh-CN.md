@@ -513,7 +513,7 @@ Discovery 授权；Web 通过 TanStack Query 使用 Zod 校验后的响应，不
 | --- | --- | --- |
 | M5-01 | `DONE` | Namespace 层级 Trust Policy 管理：`ManageTrustPolicy`（仅 owner）与复用 `ViewOrganization`（成员可读）capability；经授权的 `CreatePolicy`，含即时 Namespace 作用域重新验证；`GET`/`POST /api/v1/namespaces/{namespace}/trust-policy`；查看当前 + 创建版本的 Web UI；OpenAPI 与双语文档 |
 
-验收证据：授权、Namespace 作用域 repair 与 HTTP handler 单元测试通过；管理路径强制仅 owner 创建、成员可读，非成员得到 `404`（不泄露存在性）；前端 schema/client 测试、TypeScript、ESLint 与 Next.js 生产构建通过；`make check` 在沙箱 Go cache 变通下通过。Namespace 作用域 repair 的 PostgreSQL 集成测试已定义，但 `HUBCR_TEST_DATABASE_URL` 未设置时会跳过（运行运行时验收脚本可覆盖）。重新验证保持信息性，不阻断 Pull。
+验收证据：授权、Namespace 作用域 repair 与 HTTP handler 单元测试通过；管理路径强制仅 owner 创建、成员可读，非成员得到 `404`（不泄露存在性）；前端 schema/client 测试、TypeScript、ESLint 与 Next.js 生产构建通过；`make check` 在沙箱 Go cache 变通下通过；`make test-m5-01-trust-policy-e2e` 通过 Docker 全栈运行时验收（登录、POST 策略 v1 与 v2、读回、即时重新验证、成员可读/非 owner `404` 授权矩阵、策略创建后 Pull 仍可用）；`make test-integration` 全部 17 个包通过，含 Namespace 作用域 repair 测试。重新验证保持信息性，不阻断 Pull。
 
 ## 11. 立即执行队列
 
